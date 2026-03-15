@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#C4775A">
+<link rel="manifest" href="manifest.json">
+<title>VidaSana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#FFF9F6;--surface:#FEF0EA;--surface2:#F8E4DA;--card:#FFFFFF;
+  --terracota:#C4775A;--terracota-deep:#A85D42;--terracota-light:#D9967E;
+  --durazno:#F5C4A1;--durazno-light:#FDDFC8;--durazno-soft:#FFF0E5;
+  --lavanda:#B8A9C9;--lavanda-deep:#9585AB;--lavanda-light:#D4CAE0;--lavanda-soft:#EDE8F3;
+  --accent:#C4775A;--accent-glow:rgba(196,119,90,.1);
+  --green:#4CAF50;--green-bg:rgba(76,175,80,.08);--green-bd:rgba(76,175,80,.25);
+  --red:#E53935;--red-bg:rgba(229,57,53,.08);--red-bd:rgba(229,57,53,.25);
+  --yellow:#F9A825;--yellow-bg:rgba(249,168,37,.08);--yellow-bd:rgba(249,168,37,.3);
+  --text:#3D2B22;--text2:#7A5E50;--text3:#B89B8C;
+  --radius:18px;--radius-sm:12px;
+}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+body{display:flex;flex-direction:column}
+.header{padding:14px 20px 8px;display:flex;align-items:center;justify-content:space-between;z-index:10}
+.header h1{font-family:'Playfair Display',serif;font-size:1.6rem;background:linear-gradient(135deg,var(--terracota),var(--lavanda-deep));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .date{font-size:.75rem;color:var(--text2);font-weight:500}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 16px 100px;scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
+.main::-webkit-scrollbar{display:none}
+.section{display:none;animation:fadeUp .35s ease}.section.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.card{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px;border:1px solid rgba(196,119,90,.08);position:relative;overflow:hidden;box-shadow:0 2px 12px rgba(61,43,34,.05)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0}
+.card-water::before{background:linear-gradient(90deg,var(--terracota),var(--durazno),transparent)}
+.card-food::before{background:linear-gradient(90deg,var(--terracota-deep),var(--durazno),transparent)}
+.card-exercise::before{background:linear-gradient(90deg,var(--lavanda),var(--lavanda-light),transparent)}
+.card-sleep::before{background:linear-gradient(90deg,var(--lavanda-deep),var(--lavanda),transparent)}
+.card-recipe::before{background:linear-gradient(90deg,var(--terracota),var(--lavanda),transparent)}
+.card-title{font-size:.7rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:10px;font-weight:600}
+
+.water-display{text-align:center;padding:20px 0}
+.water-amount{font-family:'Playfair Display',serif;font-size:3.5rem;font-weight:700;color:var(--terracota);line-height:1}
+.water-unit{font-size:.9rem;color:var(--text2);margin-top:4px}
+.water-bar{width:100%;height:10px;background:var(--durazno-soft);border-radius:5px;margin:20px 0 16px;overflow:hidden}
+.water-fill{height:100%;background:linear-gradient(90deg,var(--terracota),var(--durazno));border-radius:5px;transition:width .5s cubic-bezier(.22,1,.36,1)}
+.water-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.water-btn{padding:10px 20px;border-radius:var(--radius-sm);border:1.5px solid rgba(196,119,90,.3);background:rgba(196,119,90,.06);color:var(--terracota);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s}
+.water-btn:active{transform:scale(.95);background:rgba(196,119,90,.15)}
+.water-btn.negative{border-color:rgba(168,93,66,.3);color:var(--terracota-deep);background:rgba(168,93,66,.05)}
+
+/* FOOD */
+.day-meter{padding:14px 16px;background:var(--card);border-radius:var(--radius);margin-bottom:12px;border:1px solid rgba(196,119,90,.08);box-shadow:0 2px 12px rgba(61,43,34,.05);transition:all .4s}
+.day-meter.good{border-color:var(--green-bd);background:var(--green-bg)}
+.day-meter.warn{border-color:var(--yellow-bd);background:var(--yellow-bg)}
+.day-meter.over{border-color:var(--red-bd);background:var(--red-bg)}
+.day-meter-top{display:flex;justify-content:space-between;align-items:baseline}
+.day-meter .big{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;transition:color .3s}
+.day-meter.good .big{color:var(--green)}.day-meter.warn .big{color:var(--yellow)}.day-meter.over .big{color:var(--red)}
+.day-meter .meta{font-size:.75rem;color:var(--text2)}
+.day-bar{width:100%;height:6px;background:var(--durazno-soft);border-radius:3px;margin:8px 0;overflow:hidden}
+.day-bar-fill{height:100%;border-radius:3px;transition:all .5s cubic-bezier(.22,1,.36,1)}
+.day-breakdown{display:flex;gap:4px;flex-wrap:wrap}
+.day-bd-item{font-size:.68rem;padding:3px 8px;border-radius:10px;background:var(--durazno-soft);color:var(--text2);display:flex;align-items:center;gap:3px}
+.day-bd-dot{width:6px;height:6px;border-radius:50%}
+
+.meal-tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
+.meal-tab{padding:8px 12px;border-radius:20px;font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;border:1.5px solid var(--durazno);background:var(--durazno-soft);color:var(--text2);transition:all .2s;text-align:center;flex-shrink:0}
+.meal-tab.active{background:var(--terracota);color:#fff;border-color:var(--terracota)}
+.meal-tab .cal-badge{display:block;font-size:.62rem;opacity:.8;margin-top:1px}
+
+/* Meal calorie goal per meal */
+.meal-goal{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--durazno-soft);border-radius:var(--radius-sm);margin-bottom:12px;font-size:.8rem;transition:all .3s}
+.meal-goal.good{background:var(--green-bg);border:1px solid var(--green-bd)}
+.meal-goal.warn{background:var(--yellow-bg);border:1px solid var(--yellow-bd)}
+.meal-goal.over{background:var(--red-bg);border:1px solid var(--red-bd)}
+.meal-goal .mg-left{display:flex;align-items:center;gap:6px}
+.meal-goal .mg-label{font-weight:600}
+.meal-goal .mg-bar{width:80px;height:5px;background:rgba(0,0,0,.06);border-radius:3px;overflow:hidden}
+.meal-goal .mg-fill{height:100%;border-radius:3px;transition:all .4s}
+.meal-goal .mg-cal{font-weight:700;font-size:.85rem}
+
+.cat-section{margin-bottom:12px}
+.cat-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:0 4px}
+.cat-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem}
+.cat-name{font-size:.78rem;font-weight:700}
+.cat-rule{font-size:.6rem;color:var(--text3);margin-left:4px;font-weight:500}
+.cat-cal{font-size:.68rem;color:var(--text3);margin-left:auto}
+.food-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.food-chip{padding:7px 3px;border-radius:var(--radius-sm);border:1.5px solid var(--durazno);background:var(--durazno-soft);text-align:center;cursor:pointer;transition:all .2s;position:relative;min-width:0;overflow:hidden}
+.food-chip:active{transform:scale(.96)}
+.food-chip.selected{border-color:var(--terracota);background:rgba(196,119,90,.12);box-shadow:0 0 0 2px rgba(196,119,90,.15)}
+.food-chip.disabled{opacity:.35;pointer-events:none}
+.food-chip .f-emoji{font-size:1.15rem;display:block}
+.food-chip .f-name{font-size:.65rem;color:var(--text);font-weight:600;margin-top:2px;line-height:1.1}
+.food-chip .f-portion{font-size:.58rem;color:var(--text3);margin-top:1px}
+.food-chip .f-cal{font-size:.58rem;color:var(--terracota);font-weight:700;margin-top:1px}
+.food-chip .f-check{position:absolute;top:3px;right:3px;width:14px;height:14px;border-radius:50%;background:var(--terracota);color:#fff;font-size:.55rem;display:none;align-items:center;justify-content:center}
+.food-chip.selected .f-check{display:flex}
+
+.meal-summary{background:var(--durazno-soft);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px}
+.ms-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:.78rem}
+.ms-row .ms-name{color:var(--text)}
+.ms-row .ms-detail{color:var(--text3);font-size:.68rem}
+.ms-row .ms-cal{color:var(--terracota);font-weight:700}
+.ms-total{border-top:1px solid var(--durazno);padding-top:6px;margin-top:4px;font-weight:700}
+.meal-clear{text-align:center;padding:6px;font-size:.72rem;color:var(--text3);cursor:pointer;text-decoration:underline}
+
+/* EXERCISE */
+.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.ex-type{padding:14px;text-align:center;border-radius:var(--radius-sm);background:var(--lavanda-soft);cursor:pointer;border:1.5px solid transparent;transition:all .2s}
+.ex-type.selected{border-color:var(--lavanda);background:rgba(184,169,201,.15)}
+.ex-type .emoji{font-size:1.5rem;display:block;margin-bottom:4px}.ex-type .label{font-size:.75rem;color:var(--text2)}
+.ex-form{display:flex;gap:8px;margin-bottom:14px}
+.ex-form input{flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--lavanda-light);background:var(--lavanda-soft);color:var(--text);font-size:.85rem;font-family:inherit}
+.ex-form button{padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--lavanda);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer}
+.ex-log{max-height:200px;overflow-y:auto}
+.ex-entry{display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--lavanda-soft);border-radius:var(--radius-sm);margin-bottom:6px;font-size:.85rem}
+.ex-total{text-align:center;padding:14px;background:var(--lavanda-soft);border-radius:var(--radius-sm);margin-bottom:14px}
+.ex-total span{font-size:1.8rem;font-weight:700;color:var(--lavanda-deep)}
+
+.ws-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.ws-input-group{display:flex;flex-direction:column;gap:4px}
+.ws-input-group label{font-size:.62rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);font-weight:600}
+.ws-input-group input{padding:10px 6px;border-radius:var(--radius-sm);border:1.5px solid var(--durazno);background:var(--durazno-soft);color:var(--text);font-size:.9rem;font-family:inherit;text-align:center;min-width:0}
+.ws-save{width:100%;padding:12px;border-radius:var(--radius-sm);border:none;background:var(--terracota);color:#fff;font-weight:700;font-size:.9rem;cursor:pointer;margin-bottom:14px}
+.ws-history{max-height:180px;overflow-y:auto}
+.ws-row{display:flex;justify-content:space-between;padding:8px 10px;background:var(--durazno-soft);border-radius:var(--radius-sm);margin-bottom:5px;font-size:.75rem;gap:4px;flex-wrap:nowrap;align-items:center}
+
+/* WEIGHT GAUGE — MOBILE OPTIMIZED */
+.weight-hero{text-align:center;padding:12px 0 8px}
+.weight-hero svg{max-width:200px;margin:0 auto;display:block}
+.weight-current{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;color:var(--terracota);line-height:1}
+.weight-label{font-size:.72rem;color:var(--text2);margin-top:2px}
+.weight-ideal-bar{display:flex;align-items:center;gap:10px;padding:12px;background:var(--durazno-soft);border-radius:var(--radius-sm);margin:12px 0}
+.wib-segment{flex:1;height:7px;border-radius:4px}
+.wib-under{background:var(--yellow)}
+.wib-normal{background:var(--green)}
+.wib-over{background:var(--terracota)}
+.wib-obese{background:var(--red)}
+.weight-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:12px}
+.ws-stat{text-align:center;padding:8px 3px;background:var(--durazno-soft);border-radius:var(--radius-sm);min-width:0;overflow:hidden}
+.ws-stat .ws-val{font-size:.95rem;font-weight:700;color:var(--terracota);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-stat .ws-lbl{font-size:.52rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+.ws-stat.highlight{background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.2)}
+.ws-stat.highlight .ws-val{color:var(--green)}
+.ws-stat.warn-stat{background:var(--red-bg);border:1px solid var(--red-bd)}
+.ws-stat.warn-stat .ws-val{color:var(--red)}
+/* Registration inputs — 3 col on mobile */
+.ws-reg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.ws-reg-grid.three{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:380px){.ws-reg-grid.three{grid-template-columns:1fr 1fr;}.ws-reg-full{grid-column:1/-1}}
+
+.pantry-input{display:flex;gap:8px;margin-bottom:10px}
+.pantry-input input{flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--durazno);background:var(--durazno-soft);color:var(--text);font-size:.85rem;font-family:inherit}
+.pantry-input button{padding:10px 14px;border-radius:var(--radius-sm);border:none;background:var(--terracota);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer}
+.pantry-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:30px}
+.pantry-tag{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:rgba(196,119,90,.08);border:1px solid rgba(196,119,90,.2);border-radius:20px;font-size:.78rem;color:var(--terracota)}.pantry-tag .x{cursor:pointer;opacity:.6}
+.recipe-btn{width:100%;padding:14px;border-radius:var(--radius-sm);border:2px solid var(--terracota);background:rgba(196,119,90,.06);color:var(--terracota);font-weight:700;font-size:.9rem;cursor:pointer;margin-bottom:14px;transition:all .2s}
+.recipe-btn:active{background:rgba(196,119,90,.15);transform:scale(.98)}
+.rcat-btn{padding:6px 12px;border-radius:20px;font-size:.7rem;font-weight:600;cursor:pointer;border:1.5px solid var(--durazno);background:var(--durazno-soft);color:var(--text2);transition:all .2s}
+.rcat-btn.active{background:var(--terracota);color:#fff;border-color:var(--terracota)}
+.rcat-btn:active{transform:scale(.95)}
+.recipe-results{max-height:none;overflow-y:visible}
+.recipe-card{background:var(--durazno-soft);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border-left:3px solid var(--terracota)}
+.recipe-card h3{font-size:1rem;margin-bottom:6px;color:var(--terracota)}
+.recipe-card p{font-size:.82rem;color:var(--text2);line-height:1.5}
+.recipe-card .tag{display:inline-block;font-size:.65rem;padding:2px 8px;border-radius:10px;background:rgba(196,119,90,.1);color:var(--terracota);margin-right:4px;margin-bottom:4px}
+.recipe-card .tag-l{background:rgba(184,169,201,.15);color:var(--lavanda-deep)}
+.loading{text-align:center;padding:30px;color:var(--text2)}
+.loading .spinner{display:inline-block;width:28px;height:28px;border:3px solid var(--durazno);border-top-color:var(--terracota);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,249,246,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(196,119,90,.1);display:flex;padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:100}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 0;cursor:pointer;border-radius:12px;transition:all .2s;gap:3px}
+.nav-item.active{background:var(--accent-glow)}
+.nav-item .icon{font-size:1.3rem;transition:transform .2s}
+.nav-item.active .icon{transform:scale(1.15)}
+.nav-item .label{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);transition:color .2s}
+.nav-item.active .label{color:var(--terracota)}
+
+.backup-btn{width:100%;padding:14px;border-radius:var(--radius-sm);font-weight:700;font-size:.9rem;cursor:pointer;margin-bottom:10px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;border:none}
+.backup-btn:active{transform:scale(.98)}
+.backup-export{border:2px solid var(--terracota)!important;background:rgba(196,119,90,.06);color:var(--terracota)}
+.backup-import{border:2px solid var(--lavanda-light)!important;background:var(--lavanda-soft);color:var(--lavanda-deep)}
+.backup-info{font-size:.78rem;color:var(--text2);line-height:1.6;padding:12px;background:var(--durazno-soft);border-radius:var(--radius-sm);margin-bottom:14px}
+.backup-info strong{color:var(--text)}
+.backup-status{padding:12px;border-radius:var(--radius-sm);text-align:center;font-size:.85rem;font-weight:600;margin-bottom:14px;display:none;animation:fadeUp .3s ease}
+.backup-status.success{display:block;background:rgba(196,119,90,.1);color:var(--terracota)}
+.backup-status.error{display:block;background:rgba(168,93,66,.1);color:var(--terracota-deep)}
+.backup-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.backup-stat{text-align:center;padding:12px;background:var(--durazno-soft);border-radius:var(--radius-sm)}
+.backup-stat .val{font-size:1.2rem;font-weight:700;color:var(--terracota)}
+.backup-stat .lbl{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+#fileInput{display:none}
+.empty{text-align:center;padding:30px;color:var(--text3);font-size:.85rem}
+input:focus,select:focus{outline:none;border-color:var(--terracota)!important}
+</style>
+</head>
+<body>
+<div class="header"><h1>VidaSana</h1><span class="date" id="todayDate"></span></div>
+<div class="main">
+  <!-- WATER -->
+  <div class="section active" id="sec-water">
+    <div class="card card-water"><div class="card-title">Hidratación diaria</div><div class="water-display"><div class="water-amount" id="waterAmount">0</div><div class="water-unit">ml de <span id="waterGoalLabel">2000</span> ml</div></div><div class="water-bar"><div class="water-fill" id="waterFill" style="width:0%"></div></div><div class="water-btns"><button class="water-btn" onclick="addWater(250)">+250ml</button><button class="water-btn" onclick="addWater(500)">+500ml</button><button class="water-btn" onclick="addWater(1000)">+1L</button><button class="water-btn negative" onclick="addWater(-250)">-250ml</button></div></div>
+    <div class="card card-water"><div class="card-title">Meta diaria</div><div style="display:flex;gap:8px;align-items:center"><input type="number" id="waterGoalInput" value="2000" style="flex:1;padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--durazno);background:var(--durazno-soft);color:var(--text);font-size:.9rem;text-align:center;font-family:inherit"><span style="color:var(--text2);font-size:.85rem">ml</span><button onclick="setWaterGoal()" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--terracota);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer">OK</button></div></div>
+  </div>
+
+  <!-- FOOD -->
+  <div class="section" id="sec-food">
+    <div class="day-meter" id="dayMeter">
+      <div class="day-meter-top"><span class="big" id="dayTotal">0</span><span class="meta">/ <span id="dayGoalLabel">1800</span> kcal diarias</span></div>
+      <div class="day-bar"><div class="day-bar-fill" id="dayBar" style="width:0%"></div></div>
+      <div class="day-breakdown" id="dayBreakdown"></div>
+    </div>
+    <div class="meal-tabs" id="mealTabs">
+      <div class="meal-tab active" onclick="switchMeal('desayuno',this)">🌅 Desayuno<span class="cal-badge" id="bdgDesayuno">0/400</span></div>
+      <div class="meal-tab" onclick="switchMeal('almuerzo',this)">☀️ Almuerzo<span class="cal-badge" id="bdgAlmuerzo">0/550</span></div>
+      <div class="meal-tab" onclick="switchMeal('cena',this)">🌙 Cena<span class="cal-badge" id="bdgCena">0/450</span></div>
+      <div class="meal-tab" onclick="switchMeal('snack',this)">🍎 Snack<span class="cal-badge" id="bdgSnack">0/200</span></div>
+    </div>
+    <div class="meal-goal" id="mealGoalBar"><div class="mg-left"><span class="mg-label" id="mgLabel">Desayuno</span><div class="mg-bar"><div class="mg-fill" id="mgFill" style="width:0%"></div></div></div><span class="mg-cal" id="mgCal">0 / 400 cal</span></div>
+    <div id="mealContent"></div>
+    <div class="card card-food" id="mealSummaryCard" style="display:none"><div class="card-title">Tu selección</div><div class="meal-summary" id="mealSummary"></div><div class="meal-clear" onclick="clearCurrentMeal()">🗑️ Limpiar esta comida</div></div>
+  </div>
+
+  <!-- EXERCISE — CONNECTED TO WEIGHT GOALS -->
+  <div class="section" id="sec-exercise">
+    <div class="card card-exercise"><div class="card-title">Minutos activos hoy</div><div class="ex-total"><span id="exTotal">0</span> min</div></div>
+    <div class="card card-exercise" id="exRecommendCard" style="display:none">
+      <div class="card-title">💡 Plan recomendado según tu meta</div>
+      <div id="exRecommend" style="font-size:.82rem;color:var(--text2);line-height:1.6"></div>
+    </div>
+    <div class="card card-exercise"><div class="card-title">Tipo de ejercicio</div><div class="ex-grid"><div class="ex-type selected" data-type="Correr" onclick="selectEx(this)"><span class="emoji">🏃</span><span class="label">Correr</span></div><div class="ex-type" data-type="Caminar" onclick="selectEx(this)"><span class="emoji">🚶</span><span class="label">Caminar</span></div><div class="ex-type" data-type="Pesas" onclick="selectEx(this)"><span class="emoji">🏋️</span><span class="label">Pesas</span></div><div class="ex-type" data-type="Yoga" onclick="selectEx(this)"><span class="emoji">🧘</span><span class="label">Yoga</span></div><div class="ex-type" data-type="Bici" onclick="selectEx(this)"><span class="emoji">🚴</span><span class="label">Bici</span></div><div class="ex-type" data-type="Nadar" onclick="selectEx(this)"><span class="emoji">🏊</span><span class="label">Nadar</span></div></div><div class="ex-form"><input type="number" id="exMin" placeholder="Minutos"><button onclick="addExercise()">Registrar</button></div></div>
+    <div class="card card-exercise"><div class="card-title">Actividades de hoy</div><div class="ex-log" id="exLog"><div class="empty">Sin actividad aún</div></div></div>
+  </div>
+
+  <!-- WEIGHT -->
+  <div class="section" id="sec-sleep">
+    <!-- Single registration card: peso + altura + peso ideal -->
+    <div class="card card-food">
+      <div class="card-title">📏 Tu registro</div>
+      <div class="ws-reg-grid three">
+        <div class="ws-input-group"><label>Peso (kg)</label><input type="number" step="0.1" id="weightInput" placeholder="70.0"></div>
+        <div class="ws-input-group"><label>Altura (cm)</label><input type="number" id="heightInput" placeholder="170"></div>
+        <div class="ws-input-group ws-reg-full"><label>Peso ideal (kg)</label><input type="number" step="0.1" id="idealInput" placeholder="65"></div>
+      </div>
+      <button class="ws-save" onclick="saveAllWeight()">Guardar</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="weightDashboard" style="display:none">
+      <!-- Visual measuring tape -->
+      <div class="card card-food" style="text-align:center">
+        <div style="position:relative;padding:20px 0 12px">
+          <svg viewBox="0 0 200 60" style="max-width:260px;margin:0 auto;display:block" xmlns="http://www.w3.org/2000/svg">
+            <!-- Tape body -->
+            <rect x="10" y="15" width="180" height="30" rx="6" fill="#F5C4A1" stroke="#C4775A" stroke-width="1.5"/>
+            <!-- Tick marks -->
+            <line x1="30" y1="15" x2="30" y2="28" stroke="#C4775A" stroke-width="1" opacity=".5"/>
+            <line x1="50" y1="15" x2="50" y2="25" stroke="#C4775A" stroke-width="1" opacity=".4"/>
+            <line x1="70" y1="15" x2="70" y2="28" stroke="#C4775A" stroke-width="1" opacity=".5"/>
+            <line x1="90" y1="15" x2="90" y2="25" stroke="#C4775A" stroke-width="1" opacity=".4"/>
+            <line x1="110" y1="15" x2="110" y2="28" stroke="#C4775A" stroke-width="1" opacity=".5"/>
+            <line x1="130" y1="15" x2="130" y2="25" stroke="#C4775A" stroke-width="1" opacity=".4"/>
+            <line x1="150" y1="15" x2="150" y2="28" stroke="#C4775A" stroke-width="1" opacity=".5"/>
+            <line x1="170" y1="15" x2="170" y2="25" stroke="#C4775A" stroke-width="1" opacity=".4"/>
+            <!-- Pointer -->
+            <polygon id="tapePointer" points="100,8 96,15 104,15" fill="#C4775A"/>
+          </svg>
+          <div class="weight-current" id="wCurrent" style="margin-top:8px">--</div>
+          <div class="weight-label" id="wStatus">Registra tu peso</div>
+        </div>
+        <div style="display:flex;gap:3px;margin:10px 0 4px">
+          <div class="wib-segment wib-under"></div>
+          <div class="wib-segment wib-normal"></div>
+          <div class="wib-segment wib-over"></div>
+          <div class="wib-segment wib-obese"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:.58rem;color:var(--text3);padding:0 2px;margin-bottom:10px">
+          <span>Bajo peso</span><span>Normal</span><span>Sobrepeso</span><span>Obesidad</span>
+        </div>
+        <div class="weight-stats">
+          <div class="ws-stat" id="wBmiStat"><div class="ws-val" id="wBmi">--</div><div class="ws-lbl">IMC</div></div>
+          <div class="ws-stat highlight"><div class="ws-val" id="wIdeal">--</div><div class="ws-lbl">Meta peso</div></div>
+          <div class="ws-stat"><div class="ws-val" id="wDiff">--</div><div class="ws-lbl">Diferencia</div></div>
+        </div>
+      </div>
+
+      <!-- Calorías recomendadas -->
+      <div class="card card-food">
+        <div class="card-title">🔥 Calorías diarias recomendadas</div>
+        <div style="text-align:center;padding:8px 0">
+          <div style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;color:var(--terracota)" id="calRecVal">--</div>
+          <div style="font-size:.75rem;color:var(--text2)">kcal / día</div>
+        </div>
+        <div id="calRecDetail" style="font-size:.78rem;color:var(--text2);line-height:1.5;padding:8px;background:var(--durazno-soft);border-radius:var(--radius-sm)"></div>
+      </div>
+    </div>
+
+    <!-- Historial -->
+    <div class="card card-food">
+      <div class="card-title">📊 Historial</div>
+      <div class="ws-history" id="wsHistory"><div class="empty">Sin registros aún</div></div>
+    </div>
+  </div>
+
+  <!-- RECIPES -->
+  <div class="section" id="sec-recipe">
+    <div class="card card-recipe"><div class="card-title">¿Qué hay en tu despensa?</div><div class="pantry-input"><input type="text" id="pantryInput" placeholder="Ej: pollo, arroz, limón..." onkeydown="if(event.key==='Enter')addPantryItem()"><button onclick="addPantryItem()">+</button></div><div class="pantry-tags" id="pantryTags"></div><button class="recipe-btn" onclick="generateRecipes()">🍳 Buscar recetas</button></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
+      <span class="rcat-btn active" onclick="filterByCat('todas')">Todas</span>
+      <span class="rcat-btn" onclick="filterByCat('entrada')">🥗 Entradas</span>
+      <span class="rcat-btn" onclick="filterByCat('sopa')">🍲 Sopas</span>
+      <span class="rcat-btn" onclick="filterByCat('principal')">🍽️ Principales</span>
+      <span class="rcat-btn" onclick="filterByCat('ensalada')">🥬 Ensaladas</span>
+      <span class="rcat-btn" onclick="filterByCat('desayuno')">🌅 Desayunos</span>
+      <span class="rcat-btn" onclick="filterByCat('snack')">🍿 Snacks</span>
+    </div>
+    <div id="recipeResults" class="recipe-results"></div>
+    <p style="text-align:center;font-size:.65rem;color:var(--text3);padding:10px">📖 35 recetas peruanas saludables · Funciona sin internet</p>
+  </div>
+
+  <!-- BACKUP -->
+  <div class="section" id="sec-backup">
+    <div class="card"><div class="card-title">Estado</div><div class="backup-stats"><div class="backup-stat"><div class="val" id="bkDays">0</div><div class="lbl">Días</div></div><div class="backup-stat"><div class="val" id="bkSize">0 KB</div><div class="lbl">Tamaño</div></div></div></div>
+    <div class="card"><div class="card-title">Respaldo</div><div class="backup-info"><strong>Exportar:</strong> Descarga JSON.<br><strong>Importar:</strong> Restaura desde respaldo.</div><div class="backup-status" id="backupStatus"></div><button class="backup-btn backup-export" onclick="exportData()">📦 Exportar</button><button class="backup-btn backup-import" onclick="document.getElementById('fileInput').click()">📂 Importar</button><input type="file" id="fileInput" accept=".json" onchange="importData(event)"></div>
+    <div class="card"><div class="card-title" style="color:var(--terracota-deep)">Zona de peligro</div><button class="backup-btn" style="border:2px solid rgba(168,93,66,.3)!important;background:rgba(168,93,66,.05);color:var(--terracota-deep)" onclick="clearAllData()">🗑️ Borrar todo</button></div>
+  </div>
+</div>
+
+<nav class="nav">
+  <div class="nav-item active" onclick="switchTab('water')"><span class="icon">💧</span><span class="label">Agua</span></div>
+  <div class="nav-item" onclick="switchTab('food')"><span class="icon">🍽️</span><span class="label">Comida</span></div>
+  <div class="nav-item" onclick="switchTab('exercise')"><span class="icon">💪</span><span class="label">Ejercicio</span></div>
+  <div class="nav-item" onclick="switchTab('sleep')"><span class="icon">📏</span><span class="label">Peso</span></div>
+  <div class="nav-item" onclick="switchTab('recipe')"><span class="icon">🧑‍🍳</span><span class="label">Recetas</span></div>
+  <div class="nav-item" onclick="switchTab('backup')"><span class="icon">⚙️</span><span class="label">Datos</span></div>
+</nav>
+
+<script>
+const TODAY=new Date().toISOString().slice(0,10);
+function getStore(k,d){try{return JSON.parse(localStorage.getItem(k+'_'+TODAY))||d}catch{return d}}
+function setStore(k,v){localStorage.setItem(k+'_'+TODAY,JSON.stringify(v))}
+function getGlobal(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch{return d}}
+function setGlobal(k,v){localStorage.setItem(k,JSON.stringify(v))}
+document.getElementById('todayDate').textContent=new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+
+function switchTab(name){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('sec-'+name).classList.add('active');event.currentTarget.classList.add('active');document.querySelector('.main').scrollTop=0}
+
+// WATER
+let waterTotal=getStore('water',0),waterGoal=getGlobal('waterGoal',2000);
+document.getElementById('waterGoalInput').value=waterGoal;
+function renderWater(){document.getElementById('waterAmount').textContent=waterTotal;document.getElementById('waterGoalLabel').textContent=waterGoal;document.getElementById('waterFill').style.width=Math.min(100,(waterTotal/waterGoal)*100)+'%'}
+function addWater(ml){waterTotal=Math.max(0,waterTotal+ml);setStore('water',waterTotal);renderWater()}
+function setWaterGoal(){waterGoal=parseInt(document.getElementById('waterGoalInput').value)||2000;setGlobal('waterGoal',waterGoal);renderWater()}
+renderWater();
+
+// =================== NUTRITIONIST FOOD SYSTEM ===================
+
+// Per-meal calorie goals and rules
+const MEAL_GOALS={desayuno:400,almuerzo:550,cena:450,snack:200};
+const DAY_GOAL=1800;
+
+// Rules: max items per category per meal
+// desayuno fruta = 2 (can pick multiple), rest = 1
+// almuerzo/cena/snack = 1 per category (strict balance)
+const CAT_LIMITS={
+  desayuno:{proteina:1,carbohidrato:1,fruta:2,grasas_saludables:1,bebida:1},
+  almuerzo:{proteina:1,carbohidrato:1,ensalada:1,fruta:1},
+  cena:{proteina:1,carbohidrato:1,ensalada:1,fruta:1},
+  snack:{proteina:1,carbohidrato:1,fruta:1}
+};
+
+const FOOD_DB={
+  desayuno:{
+    proteina:[
+      {id:'huevo_cocido',name:'Huevo cocido',emoji:'🥚',portion:'1 unidad',cal:78},
+      {id:'huevo_revuelto',name:'Huevo revuelto',emoji:'🍳',portion:'1 unidad',cal:91},
+      {id:'atun_des',name:'Atún en agua',emoji:'🐟',portion:'80g',cal:90},
+      {id:'queso_fresco',name:'Queso fresco',emoji:'🧀',portion:'30g',cal:70},
+      {id:'yogurt_natural',name:'Yogurt natural',emoji:'🥛',portion:'200ml',cal:120},
+      {id:'yogurt_griego',name:'Yogurt griego',emoji:'🥣',portion:'200ml',cal:100},
+      {id:'tortilla_huevo',name:'Tortilla 2 huevos',emoji:'🍳',portion:'2 huevos',cal:180},
+      {id:'jamon_pavo',name:'Jamón de pavo',emoji:'🦃',portion:'40g',cal:50},
+    ],
+    carbohidrato:[
+      {id:'avena',name:'Avena',emoji:'🥣',portion:'1 taza cocida',cal:150},
+      {id:'tostada_int',name:'Tostada integral',emoji:'🍞',portion:'2 rebanadas',cal:140},
+      {id:'pan_integral',name:'Pan integral',emoji:'🥖',portion:'1 unidad',cal:120},
+      {id:'camote_des',name:'Camote cocido',emoji:'🍠',portion:'100g',cal:86},
+      {id:'granola',name:'Granola',emoji:'🥜',portion:'30g',cal:130},
+      {id:'pancakes',name:'Pancakes de avena',emoji:'🥞',portion:'2 unidades',cal:180},
+      {id:'choclo_des',name:'Choclo',emoji:'🌽',portion:'1 unidad',cal:90},
+    ],
+    fruta:[
+      {id:'platano_des',name:'Plátano',emoji:'🍌',portion:'½ unidad',cal:45},
+      {id:'manzana_des',name:'Manzana',emoji:'🍎',portion:'½ unidad',cal:36},
+      {id:'papaya_des',name:'Papaya',emoji:'🍈',portion:'½ taza',cal:28},
+      {id:'sandia_des',name:'Sandía',emoji:'🍉',portion:'½ taza',cal:23},
+      {id:'fresa_des',name:'Fresas',emoji:'🍓',portion:'½ taza',cal:25},
+      {id:'mandarina_des',name:'Mandarina',emoji:'🍊',portion:'1 unidad',cal:35},
+      {id:'lucuma_des',name:'Lúcuma',emoji:'🟡',portion:'¼ unidad',cal:40},
+      {id:'arandanos_des',name:'Arándanos',emoji:'🫐',portion:'¼ taza',cal:21},
+      {id:'melon_des',name:'Melón',emoji:'🍈',portion:'½ taza',cal:27},
+    ],
+    grasas_saludables:[
+      {id:'palta_des',name:'Palta',emoji:'🥑',portion:'¼ unidad',cal:80},
+      {id:'aceituna_des',name:'Aceitunas',emoji:'🫒',portion:'6 unidades',cal:50},
+      {id:'mani',name:'Mantequilla maní',emoji:'🥜',portion:'1 cda',cal:94},
+      {id:'chia_des',name:'Semillas chía',emoji:'🌱',portion:'1 cda',cal:49},
+      {id:'almendras_des',name:'Almendras',emoji:'🌰',portion:'10 unidades',cal:70},
+    ],
+    bebida:[
+      {id:'cafe_negro',name:'Café negro',emoji:'☕',portion:'1 taza',cal:5},
+      {id:'cafe_leche',name:'Café con leche',emoji:'☕',portion:'1 taza',cal:67},
+      {id:'cafe_leche_light',name:'Café con leche light',emoji:'☕',portion:'1 taza',cal:40},
+      {id:'te_des',name:'Té / Infusión',emoji:'🍵',portion:'1 taza',cal:2},
+      {id:'jugo_naranja',name:'Jugo de naranja',emoji:'🍊',portion:'1 vaso',cal:112},
+      {id:'jugo_papaya',name:'Jugo de papaya',emoji:'🍈',portion:'1 vaso',cal:70},
+      {id:'agua_limon',name:'Agua con limón',emoji:'🍋',portion:'1 vaso',cal:8},
+    ],
+  },
+  almuerzo:{
+    proteina:[
+      {id:'pollo_alm',name:'Pollo plancha',emoji:'🍗',portion:'120g',cal:165},
+      {id:'pescado_alm',name:'Pescado plancha',emoji:'🐟',portion:'120g',cal:140},
+      {id:'carne_alm',name:'Res magra',emoji:'🥩',portion:'120g',cal:200},
+      {id:'lomo_salt',name:'Lomo saltado light',emoji:'🥘',portion:'1 porción',cal:250},
+      {id:'atun_alm',name:'Atún en agua',emoji:'🐟',portion:'1 lata',cal:180},
+      {id:'lentejas_alm',name:'Lentejas',emoji:'🫘',portion:'1 taza',cal:230},
+      {id:'huevo_alm',name:'Huevo duro',emoji:'🥚',portion:'2 unidades',cal:156},
+      {id:'ceviche_alm',name:'Ceviche',emoji:'🐠',portion:'1 porción',cal:180},
+    ],
+    carbohidrato:[
+      {id:'arroz_int',name:'Arroz integral',emoji:'🍚',portion:'1 taza',cal:216},
+      {id:'arroz_bco',name:'Arroz blanco',emoji:'🍚',portion:'½ taza',cal:120},
+      {id:'quinua_alm',name:'Quinua',emoji:'🌾',portion:'1 taza',cal:222},
+      {id:'papa_alm',name:'Papa cocida',emoji:'🥔',portion:'1 mediana',cal:130},
+      {id:'camote_alm',name:'Camote horno',emoji:'🍠',portion:'150g',cal:129},
+      {id:'yuca_alm',name:'Yuca vapor',emoji:'🥔',portion:'100g',cal:112},
+      {id:'frejoles_alm',name:'Frejoles',emoji:'🫘',portion:'1 taza',cal:225},
+      {id:'pasta_int',name:'Pasta integral',emoji:'🍝',portion:'1 taza',cal:174},
+    ],
+    ensalada:[
+      {id:'ens_mixta',name:'Ensalada mixta',emoji:'🥗',portion:'1 plato',cal:45},
+      {id:'tomate_ceb',name:'Tomate y cebolla',emoji:'🍅',portion:'1 porción',cal:30},
+      {id:'brocoli_alm',name:'Brócoli vapor',emoji:'🥦',portion:'1 taza',cal:55},
+      {id:'espinaca_alm',name:'Espinaca saltada',emoji:'🥬',portion:'1 taza',cal:41},
+      {id:'vainitas_alm',name:'Vainitas',emoji:'🫛',portion:'1 taza',cal:44},
+      {id:'zapallo_alm',name:'Zapallo horno',emoji:'🎃',portion:'1 taza',cal:49},
+      {id:'palta_alm',name:'Palta en rodajas',emoji:'🥑',portion:'¼ unidad',cal:80},
+    ],
+    fruta:[
+      {id:'pina_alm',name:'Piña',emoji:'🍍',portion:'1 taza',cal:82},
+      {id:'papaya_alm',name:'Papaya',emoji:'🍈',portion:'1 taza',cal:55},
+      {id:'sandia_alm',name:'Sandía',emoji:'🍉',portion:'1 taza',cal:46},
+      {id:'mango_alm',name:'Mango',emoji:'🥭',portion:'½ unidad',cal:67},
+      {id:'melon_alm',name:'Melón',emoji:'🍈',portion:'1 taza',cal:54},
+      {id:'maracuya_alm',name:'Maracuyá jugo',emoji:'🧃',portion:'1 vaso',cal:60},
+    ],
+  },
+  cena:{
+    proteina:[
+      {id:'pollo_cena',name:'Pollo plancha',emoji:'🍗',portion:'100g',cal:137},
+      {id:'pescado_cena',name:'Pescado horno',emoji:'🐟',portion:'100g',cal:120},
+      {id:'claras_cena',name:'Tortilla claras',emoji:'🍳',portion:'3 claras',cal:51},
+      {id:'atun_cena',name:'Atún en agua',emoji:'🐟',portion:'½ lata',cal:90},
+      {id:'queso_cena',name:'Queso fresco',emoji:'🧀',portion:'60g',cal:140},
+      {id:'jamon_cena',name:'Jamón pavo',emoji:'🦃',portion:'3 tajadas',cal:75},
+    ],
+    carbohidrato:[
+      {id:'tostada_cena',name:'Tostada integral',emoji:'🍞',portion:'1 rebanada',cal:70},
+      {id:'camote_cena',name:'Camote cocido',emoji:'🍠',portion:'80g',cal:69},
+      {id:'quinua_cena',name:'Quinua',emoji:'🌾',portion:'½ taza',cal:111},
+      {id:'sopa_cena',name:'Sopa verduras',emoji:'🍲',portion:'1 tazón',cal:80},
+    ],
+    ensalada:[
+      {id:'ens_verde',name:'Ensalada verde',emoji:'🥗',portion:'1 plato',cal:35},
+      {id:'pepino_tom',name:'Pepino y tomate',emoji:'🥒',portion:'1 porción',cal:25},
+      {id:'verduras_vap',name:'Verduras vapor',emoji:'🥦',portion:'1 taza',cal:50},
+      {id:'crema_zap',name:'Crema zapallo',emoji:'🎃',portion:'1 taza',cal:90},
+      {id:'caldo_pollo',name:'Caldo de pollo',emoji:'🍲',portion:'1 tazón',cal:86},
+    ],
+    fruta:[
+      {id:'manzana_cena',name:'Manzana',emoji:'🍎',portion:'1 unidad',cal:72},
+      {id:'pera_cena',name:'Pera',emoji:'🍐',portion:'1 unidad',cal:57},
+      {id:'melon_cena',name:'Melón',emoji:'🍈',portion:'1 taza',cal:54},
+      {id:'infusion',name:'Infusión / Té',emoji:'🍵',portion:'1 taza',cal:2},
+    ],
+  },
+  snack:{
+    proteina:[
+      {id:'yogurt_snk',name:'Yogurt natural',emoji:'🥛',portion:'1 vaso',cal:120},
+      {id:'huevo_snk',name:'Huevo duro',emoji:'🥚',portion:'1 unidad',cal:78},
+      {id:'queso_snk',name:'Quesito',emoji:'🧀',portion:'1 tajada',cal:70},
+    ],
+    carbohidrato:[
+      {id:'galleta_snk',name:'Galleta integral',emoji:'🍪',portion:'3 unidades',cal:90},
+      {id:'tostada_snk',name:'Tostada',emoji:'🍞',portion:'1 rebanada',cal:70},
+      {id:'canchita_snk',name:'Canchita',emoji:'🍿',portion:'½ taza',cal:55},
+    ],
+    fruta:[
+      {id:'fruta_snk',name:'Fruta estación',emoji:'🍎',portion:'1 unidad',cal:70},
+      {id:'mix_snk',name:'Mix frutos secos',emoji:'🥜',portion:'25g',cal:145},
+      {id:'platano_snk',name:'Plátano',emoji:'🍌',portion:'1 unidad',cal:89},
+      {id:'melon_snk',name:'Melón',emoji:'🍈',portion:'1 taza',cal:54},
+    ],
+  }
+};
+
+const CAT_META={
+  proteina:{icon:'🥩',label:'Proteína',color:'#C4775A'},
+  carbohidrato:{icon:'🌾',label:'Carbohidrato',color:'#A85D42'},
+  ensalada:{icon:'🥗',label:'Ensalada / Vegetales',color:'#4CAF50'},
+  fruta:{icon:'🍎',label:'Fruta',color:'#9585AB'},
+  grasas_saludables:{icon:'🥑',label:'Grasas saludables',color:'#B8A9C9'},
+  bebida:{icon:'☕',label:'Bebida',color:'#8B6F47'},
+};
+
+let currentMeal='desayuno';
+let mealSelections=getStore('meals',{desayuno:[],almuerzo:[],cena:[],snack:[]});
+
+function switchMeal(meal,el){
+  currentMeal=meal;
+  document.querySelectorAll('.meal-tab').forEach(t=>t.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderMealContent();
+  updateAllMeters();
+}
+
+function countCatSelected(meal,cat){return(mealSelections[meal]||[]).filter(f=>f.cat===cat).length}
+function getMealCal(meal){return(mealSelections[meal]||[]).reduce((s,f)=>s+f.cal,0)}
+function getTotalCal(){return getMealCal('desayuno')+getMealCal('almuerzo')+getMealCal('cena')+getMealCal('snack')}
+
+function toggleFood(meal,cat,foodId){
+  if(!mealSelections[meal])mealSelections[meal]=[];
+  const idx=mealSelections[meal].findIndex(f=>f.id===foodId);
+  if(idx>=0){
+    mealSelections[meal].splice(idx,1);
+  }else{
+    const limit=CAT_LIMITS[meal]?.[cat]||1;
+    const currentCount=countCatSelected(meal,cat);
+    if(currentCount>=limit){
+      // Replace: remove oldest in this category, add new
+      const oldIdx=mealSelections[meal].findIndex(f=>f.cat===cat);
+      if(oldIdx>=0)mealSelections[meal].splice(oldIdx,1);
+    }
+    const food=FOOD_DB[meal][cat].find(f=>f.id===foodId);
+    if(food)mealSelections[meal].push({...food,cat});
+  }
+  setStore('meals',mealSelections);
+  renderMealContent();
+  updateAllMeters();
+}
+
+function clearCurrentMeal(){
+  mealSelections[currentMeal]=[];
+  setStore('meals',mealSelections);
+  renderMealContent();
+  updateAllMeters();
+}
+
+function updateAllMeters(){
+  const total=getTotalCal();
+  const pct=(total/DAY_GOAL)*100;
+  const dm=document.getElementById('dayMeter');
+  const db=document.getElementById('dayBar');
+  document.getElementById('dayTotal').textContent=total;
+  document.getElementById('dayGoalLabel').textContent=DAY_GOAL;
+  dm.className='day-meter';
+  if(total<=DAY_GOAL*0.85){dm.classList.add('good');db.style.background='var(--green)'}
+  else if(total<=DAY_GOAL){dm.classList.add('warn');db.style.background='var(--yellow)'}
+  else{dm.classList.add('over');db.style.background='var(--red)'}
+  db.style.width=Math.min(100,pct)+'%';
+
+  const colors={desayuno:'#C4775A',almuerzo:'#A85D42',cena:'#9585AB',snack:'#B8A9C9'};
+  const names={desayuno:'Desayuno',almuerzo:'Almuerzo',cena:'Cena',snack:'Snack'};
+  document.getElementById('dayBreakdown').innerHTML=Object.keys(MEAL_GOALS).map(m=>{
+    const c=getMealCal(m);
+    return`<div class="day-bd-item"><span class="day-bd-dot" style="background:${colors[m]}"></span>${names[m]}: ${c}</div>`;
+  }).join('');
+
+  // Per-meal badges
+  Object.keys(MEAL_GOALS).forEach(m=>{
+    const el=document.getElementById('bdg'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(el)el.textContent=getMealCal(m)+'/'+MEAL_GOALS[m];
+  });
+
+  // Current meal goal bar
+  const mc=getMealCal(currentMeal);
+  const mg=MEAL_GOALS[currentMeal];
+  const mp=(mc/mg)*100;
+  const bar=document.getElementById('mealGoalBar');
+  const fill=document.getElementById('mgFill');
+  document.getElementById('mgLabel').textContent=names[currentMeal];
+  document.getElementById('mgCal').textContent=mc+' / '+mg+' cal';
+  bar.className='meal-goal';
+  if(mc<=mg*0.85){bar.classList.add('good');fill.style.background='var(--green)'}
+  else if(mc<=mg){bar.classList.add('warn');fill.style.background='var(--yellow)'}
+  else{bar.classList.add('over');fill.style.background='var(--red)'}
+  fill.style.width=Math.min(100,mp)+'%';
+}
+
+function renderMealContent(){
+  const container=document.getElementById('mealContent');
+  const cats=FOOD_DB[currentMeal];
+  if(!cats){container.innerHTML='';return}
+  const selected=mealSelections[currentMeal]||[];
+  const selIds=selected.map(f=>f.id);
+  const limits=CAT_LIMITS[currentMeal]||{};
+
+  let html='';
+  for(const[cat,foods] of Object.entries(cats)){
+    const meta=CAT_META[cat]||{icon:'🍽️',label:cat,color:'#888'};
+    const limit=limits[cat]||1;
+    const catCount=countCatSelected(currentMeal,cat);
+    const catCal=selected.filter(f=>f.cat===cat).reduce((s,f)=>s+f.cal,0);
+    const limitLabel=limit>1?`máx ${limit}`:'elige 1';
+
+    html+=`<div class="cat-section"><div class="cat-header"><div class="cat-icon" style="background:${meta.color}15;color:${meta.color}">${meta.icon}</div><div class="cat-name">${meta.label}</div><span class="cat-rule">(${limitLabel})</span><div class="cat-cal">${catCal>0?catCal+' cal':''}</div></div><div class="food-grid">`;
+
+    for(const f of foods){
+      const isSel=selIds.includes(f.id);
+      // Disable if category is full AND this item is not selected
+      const isFull=catCount>=limit&&!isSel;
+      const cls=[isSel?'selected':'',isFull?'disabled':''].filter(Boolean).join(' ');
+      html+=`<div class="food-chip ${cls}" onclick="toggleFood('${currentMeal}','${cat}','${f.id}')"><div class="f-check">✓</div><span class="f-emoji">${f.emoji}</span><span class="f-name">${f.name}</span><span class="f-portion">${f.portion}</span><span class="f-cal">${f.cal} cal</span></div>`;
+    }
+    html+=`</div></div>`;
+  }
+  container.innerHTML=html;
+
+  // Summary
+  const sc=document.getElementById('mealSummaryCard');
+  const sd=document.getElementById('mealSummary');
+  if(selected.length){
+    sc.style.display='block';
+    sd.innerHTML=selected.map(f=>{
+      const m=CAT_META[f.cat]||{label:f.cat};
+      return`<div class="ms-row"><span class="ms-name">${f.emoji} ${f.name}</span><span class="ms-detail">${f.portion} · ${m.label}</span><span class="ms-cal">${f.cal}</span></div>`;
+    }).join('')+`<div class="ms-row ms-total"><span class="ms-name">Total</span><span></span><span class="ms-cal">${getMealCal(currentMeal)} cal</span></div>`;
+  }else sc.style.display='none';
+}
+
+renderMealContent();
+updateAllMeters();
+
+// EXERCISE — CONNECTED TO WEIGHT GOALS
+let exType='Correr',exercises=getStore('exercises',[]);
+function selectEx(el){document.querySelectorAll('.ex-type').forEach(e=>e.classList.remove('selected'));el.classList.add('selected');exType=el.dataset.type}
+function renderExercises(){
+  const log=document.getElementById('exLog');
+  const totalMin=exercises.reduce((s,e)=>s+e.min,0);
+  document.getElementById('exTotal').textContent=totalMin;
+  if(!exercises.length){log.innerHTML='<div class="empty">Sin actividad aún</div>';return}
+  const emojis={Correr:'🏃',Caminar:'🚶',Pesas:'🏋️',Yoga:'🧘',Bici:'🚴',Nadar:'🏊'};
+  log.innerHTML=exercises.map((e,i)=>`<div class="ex-entry"><span>${emojis[e.type]||'🏃'} ${e.type}</span><span style="display:flex;align-items:center;gap:8px"><span style="color:var(--lavanda-deep);font-weight:600">${e.min} min</span><span onclick="delEx(${i})" style="color:var(--text3);cursor:pointer;padding:2px 6px">×</span></span></div>`).join('');
+}
+function addExercise(){const min=parseInt(document.getElementById('exMin').value);if(!min)return;exercises.push({type:exType,min});setStore('exercises',exercises);document.getElementById('exMin').value='';renderExercises();renderExRecommend()}
+function delEx(i){exercises.splice(i,1);setStore('exercises',exercises);renderExercises();renderExRecommend()}
+
+function renderExRecommend(){
+  const card=document.getElementById('exRecommendCard');
+  const div=document.getElementById('exRecommend');
+  const weight=getLastWeight();
+  if(!weight||!userIdeal||!userHeight){card.style.display='none';return}
+  card.style.display='block';
+  const diff=weight-userIdeal;
+  const bmi=calcBMI(weight,userHeight);
+  const totalMin=exercises.reduce((s,e)=>s+e.min,0);
+  let plan='';
+
+  if(diff>5){
+    // Needs to lose weight
+    const targetMin=45;
+    const remaining=Math.max(0,targetMin-totalMin);
+    plan=`<div style="margin-bottom:8px"><strong style="color:var(--terracota)">🎯 Meta: Perder ${diff.toFixed(1)}kg</strong></div>`;
+    plan+=`<div style="margin-bottom:6px">📋 <strong>Plan diario recomendado (45-60 min):</strong></div>`;
+    plan+=`<div style="padding:8px;background:var(--lavanda-soft);border-radius:var(--radius-sm);margin-bottom:8px">`;
+    plan+=`• 🏃 <strong>Cardio</strong> 25-30 min (correr, bici o nadar)<br>`;
+    plan+=`• 🏋️ <strong>Fuerza</strong> 15-20 min (pesas, sentadillas, planchas)<br>`;
+    plan+=`• 🧘 <strong>Estiramiento</strong> 5-10 min (yoga, flexibilidad)</div>`;
+    plan+=remaining>0?`<div style="color:var(--terracota);font-weight:600">⏱ Te faltan ${remaining} min hoy para cumplir tu meta</div>`:`<div style="color:var(--green);font-weight:600">✅ ¡Meta de hoy cumplida! Llevas ${totalMin} min</div>`;
+    plan+=`<div style="margin-top:6px;font-size:.72rem;color:var(--text3)">💡 Con este plan + dieta de ${getRecommendedCal()} kcal puedes perder ~0.5kg por semana</div>`;
+  }else if(diff<-3){
+    // Needs to gain weight
+    plan=`<div style="margin-bottom:8px"><strong style="color:var(--lavanda-deep)">🎯 Meta: Subir ${Math.abs(diff).toFixed(1)}kg (masa muscular)</strong></div>`;
+    plan+=`<div style="margin-bottom:6px">📋 <strong>Plan diario recomendado (40-50 min):</strong></div>`;
+    plan+=`<div style="padding:8px;background:var(--lavanda-soft);border-radius:var(--radius-sm);margin-bottom:8px">`;
+    plan+=`• 🏋️ <strong>Fuerza</strong> 30-35 min (pesas progresivas)<br>`;
+    plan+=`• 🚶 <strong>Cardio suave</strong> 10-15 min (caminar, bici suave)<br>`;
+    plan+=`• 🧘 <strong>Recuperación</strong> 5 min (estiramientos)</div>`;
+    plan+=`<div style="font-size:.72rem;color:var(--text3)">💡 Prioriza proteínas y entrena fuerza 4-5 veces por semana</div>`;
+  }else{
+    // Maintenance
+    plan=`<div style="margin-bottom:8px"><strong style="color:var(--green)">🎯 ¡Estás en tu peso ideal! Mantener</strong></div>`;
+    plan+=`<div style="margin-bottom:6px">📋 <strong>Plan de mantenimiento (30-40 min):</strong></div>`;
+    plan+=`<div style="padding:8px;background:var(--lavanda-soft);border-radius:var(--radius-sm);margin-bottom:8px">`;
+    plan+=`• 🏃 <strong>Cardio</strong> 15-20 min (lo que disfrutes)<br>`;
+    plan+=`• 🏋️ <strong>Fuerza</strong> 15-20 min (mantener masa muscular)<br>`;
+    plan+=`• 🧘 <strong>Flexibilidad</strong> 5 min</div>`;
+    plan+=`<div style="font-size:.72rem;color:var(--text3)">💡 Varía actividades para no aburrirte. ¡La constancia es la clave!</div>`;
+  }
+  div.innerHTML=plan;
+}
+
+renderExercises();
+
+// WEIGHT/SLEEP
+let wsData=getGlobal('wsData',[]);
+let userHeight=getGlobal('userHeight',0);
+let userIdeal=getGlobal('userIdeal',0);
+
+document.getElementById('heightInput').value=userHeight||'';
+document.getElementById('idealInput').value=userIdeal||'';
+
+function saveAllWeight(){
+  const w=parseFloat(document.getElementById('weightInput').value);
+  const h=parseInt(document.getElementById('heightInput').value);
+  const ideal=parseFloat(document.getElementById('idealInput').value);
+
+  // Save height and ideal globally
+  if(h>100&&h<250){userHeight=h;setGlobal('userHeight',h)}
+  if(ideal>30&&ideal<200){userIdeal=ideal;setGlobal('userIdeal',ideal)}
+
+  // Save weight as daily entry
+  if(w){
+    const i=wsData.findIndex(r=>r.date===TODAY);
+    if(i>=0) wsData[i].weight=w;
+    else wsData.push({date:TODAY,weight:w});
+    setGlobal('wsData',wsData);
+  }
+
+  document.getElementById('weightInput').value='';
+  renderWeightDashboard();
+  renderExRecommend();
+  updateDayGoalFromWeight();
+}
+
+// Keep saveIdeal as alias for backward compat
+function saveIdeal(){ saveAllWeight(); }
+
+function calcBMI(weight,heightCm){
+  if(!weight||!heightCm)return 0;
+  const hm=heightCm/100;
+  return weight/(hm*hm);
+}
+
+function getBMICategory(bmi){
+  if(bmi===0)return{label:'--',emoji:'⚖️',cls:''};
+  if(bmi<18.5)return{label:'Bajo peso',emoji:'🔻',cls:''};
+  if(bmi<25)return{label:'Normal',emoji:'💚',cls:'highlight'};
+  if(bmi<30)return{label:'Sobrepeso',emoji:'⚠️',cls:'warn-stat'};
+  return{label:'Obesidad',emoji:'🔴',cls:'warn-stat'};
+}
+
+function getSleepQuality(hrs){
+  if(!hrs||hrs<=0)return{emoji:'😴',text:'Sin registro'};
+  if(hrs>=7&&hrs<=9)return{emoji:'😊',text:'Óptimo (7-9 hrs recomendadas)'};
+  if(hrs>=6)return{emoji:'😐',text:'Aceptable, intenta dormir más'};
+  if(hrs>=5)return{emoji:'😟',text:'Insuficiente, afecta tu metabolismo'};
+  return{emoji:'😵',text:'Muy poco, prioriza descanso'};
+}
+
+function getLastWeight(){
+  if(!wsData.length)return 0;
+  return wsData[wsData.length-1].weight||0;
+}
+
+function getRecommendedCal(){
+  const w=getLastWeight();
+  if(!w||!userHeight||!userIdeal)return 1800;
+  const diff=w-userIdeal;
+  // Base: Mifflin-St Jeor simplified (sedentary-moderate)
+  const base=10*w+6.25*userHeight-5*30+5; // approximate for adult
+  const active=base*1.4; // moderately active
+  if(diff>5)return Math.round(active-400); // deficit to lose
+  if(diff<-3)return Math.round(active+300); // surplus to gain
+  return Math.round(active); // maintenance
+}
+
+function renderWeightDashboard(){
+  const weight=getLastWeight();
+  const dashboard=document.getElementById('weightDashboard');
+
+  if(!weight){dashboard.style.display='none';return}
+  dashboard.style.display='block';
+
+  // Current weight
+  document.getElementById('wCurrent').textContent=weight.toFixed(1)+' kg';
+  const bmi=calcBMI(weight,userHeight);
+  const bmiCat=getBMICategory(bmi);
+  document.getElementById('wStatus').textContent=bmi?`IMC ${bmi.toFixed(1)} · ${bmiCat.label}`:'Configura tu altura para ver el IMC';
+
+  // Move tape pointer based on BMI (15-40 range mapped to 10-190 SVG x)
+  const pointer=document.getElementById('tapePointer');
+  if(bmi){
+    const clampedBmi=Math.max(15,Math.min(40,bmi));
+    const x=10+((clampedBmi-15)/(40-15))*180;
+    pointer.setAttribute('points',`${x},8 ${x-4},15 ${x+4},15`);
+    const colors={'':'var(--yellow)',highlight:'var(--green)','warn-stat':'var(--red)'};
+    pointer.setAttribute('fill',bmiCat.cls==='highlight'?'#4CAF50':bmiCat.cls==='warn-stat'?'#E53935':'#F9A825');
+  }
+
+  // BMI stat
+  document.getElementById('wBmi').textContent=bmi?bmi.toFixed(1):'--';
+  document.getElementById('wBmiStat').className='ws-stat '+(bmi?bmiCat.cls:'');
+
+  // Ideal
+  document.getElementById('wIdeal').textContent=userIdeal?userIdeal+'kg':'--';
+
+  // Difference
+  if(weight&&userIdeal){
+    const diff=weight-userIdeal;
+    const el=document.getElementById('wDiff');
+    el.textContent=(diff>0?'+':'')+diff.toFixed(1)+'kg';
+    el.style.color=Math.abs(diff)<=3?'var(--green)':diff>0?'var(--red)':'var(--yellow)';
+  }else document.getElementById('wDiff').textContent='--';
+
+  // Recommended calories
+  const recCal=getRecommendedCal();
+  document.getElementById('calRecVal').textContent=recCal;
+  const diff=weight-userIdeal;
+  let detail='';
+  if(!userIdeal||!userHeight){
+    detail='📐 Configura tu altura y peso ideal para un cálculo personalizado.';
+  }else if(diff>5){
+    detail=`🔻 <strong>Para bajar ${diff.toFixed(1)}kg:</strong> Consume ~${recCal} kcal/día con déficit calórico. Combina con 45-60 min de ejercicio diario. Puedes perder ~0.5kg por semana de forma saludable.`;
+  }else if(diff<-3){
+    detail=`🔺 <strong>Para subir ${Math.abs(diff).toFixed(1)}kg:</strong> Consume ~${recCal} kcal/día con superávit. Prioriza proteínas (1.6g por kg) y entrena fuerza 4-5 veces por semana.`;
+  }else{
+    detail=`✅ <strong>Mantenimiento:</strong> Estás dentro de tu rango ideal. Consume ~${recCal} kcal/día para mantener tu peso. Sigue activo con 30-40 min de ejercicio diario.`;
+  }
+  document.getElementById('calRecDetail').innerHTML=detail;
+
+  // History
+  const h=document.getElementById('wsHistory');
+  if(!wsData.length){h.innerHTML='<div class="empty">Sin registros aún</div>';return}
+  h.innerHTML=wsData.slice().reverse().map(r=>{
+    const d=r.weight&&userIdeal?(r.weight-userIdeal):0;
+    const ds=d?(d>0?'+':'')+d.toFixed(1)+'kg':'';
+    const bmiR=calcBMI(r.weight,userHeight);
+    const bmiLabel=bmiR?bmiR.toFixed(1):'--';
+    return`<div class="ws-row"><span style="color:var(--text3);min-width:70px">${r.date.slice(5)}</span><span>⚖️ ${r.weight}kg</span><span style="font-size:.7rem;color:${Math.abs(d)<=3?'var(--green)':'var(--terracota)'}">IMC ${bmiLabel} ${ds}</span></div>`;
+  }).join('');
+}
+
+// Remove old function reference
+function saveWeightSleep(){ saveAllWeight(); }
+
+// Update food calorie goal based on weight analysis
+function updateDayGoalFromWeight(){
+  const recCal=getRecommendedCal();
+  if(recCal && recCal!==1800){
+    document.getElementById('dayGoalLabel').textContent=recCal;
+  }
+}
+
+renderWeightDashboard();
+renderExRecommend();
+updateDayGoalFromWeight();
+
+// RECIPES — 35+ RECETAS PERUANAS SALUDABLES (100% LOCAL, SIN IA)
+const RECIPE_DB=[
+  // === ENTRADAS / CEVICHES ===
+  {nombre:"Ceviche Clásico",tiempo:"15 min",dificultad:"Fácil",calorias:"~180 kcal",cat:"entrada",ingredientes:"400g pescado blanco, 10 limones, 1 cebolla morada, ají limo, cilantro, camote",tags:["pescado","limón","cebolla","ají","cilantro","camote","mariscos"],pasos:"1. Cortar pescado en cubos de 2cm. 2. Exprimir limones y marinar 8-10 min. 3. Agregar cebolla en juliana, ají limo y cilantro. 4. Servir con camote al vapor y choclo.",tip:"Usa pescado fresco del día. El limón 'cocina' sin grasas.",sustitucion:"Champiñones para versión vegana"},
+  {nombre:"Tiradito de Pescado",tiempo:"10 min",dificultad:"Fácil",calorias:"~150 kcal",cat:"entrada",ingredientes:"300g pescado, limón, ají amarillo, ajo, aceite de oliva",tags:["pescado","limón","ají","ajo","aceite"],pasos:"1. Laminar pescado finamente. 2. Licuar ají amarillo con limón y ajo. 3. Bañar las láminas con la salsa. 4. Decorar con cebollín.",tip:"El corte fino es clave — como sashimi peruano.",sustitucion:"Usa champiñones portobello para versión vegana"},
+  {nombre:"Tiradito de Champiñones",tiempo:"10 min",dificultad:"Fácil",calorias:"~120 kcal",cat:"entrada",ingredientes:"300g champiñones, limón, ají amarillo, rocoto, cilantro",tags:["champiñones","hongos","limón","ají","rocoto","cilantro","vegano"],pasos:"1. Laminar champiñones finamente. 2. Preparar leche de ají con limón. 3. Bañar champiñones. 4. Decorar con cilantro y aceite de oliva.",tip:"Versión vegana del tiradito clásico.",sustitucion:"Portobello para más textura"},
+  {nombre:"Causa Rellena de Atún",tiempo:"20 min",dificultad:"Fácil",calorias:"~250 kcal",cat:"entrada",ingredientes:"3 camotes, 1 lata atún, 1 palta, limón, ají amarillo",tags:["camote","atún","palta","aguacate","limón","ají"],pasos:"1. Cocinar camote y hacer puré con limón y ají. 2. Mezclar atún con palta picada. 3. Armar capas: puré, relleno, puré. 4. Decorar con aceituna y huevo.",tip:"Emblema de la cocina peruana. Con camote es más nutritivo.",sustitucion:"Camote morado para más antioxidantes"},
+  {nombre:"Causa de Pollo",tiempo:"25 min",dificultad:"Fácil",calorias:"~260 kcal",cat:"entrada",ingredientes:"3 camotes, pechuga deshilachada, mayonesa light, palta, limón",tags:["camote","pollo","palta","limón","mayonesa"],pasos:"1. Puré de camote con limón y ají. 2. Mezclar pollo con mayo light y apio. 3. Capas: puré, pollo, palta, puré. 4. Decorar.",tip:"El apio le da frescura y fibra extra.",sustitucion:"Usa yogurt griego en vez de mayonesa"},
+  {nombre:"Papa a la Huancaína Light",tiempo:"15 min",dificultad:"Fácil",calorias:"~200 kcal",cat:"entrada",ingredientes:"3 camotes, ají amarillo, leche light, queso fresco, aceitunas",tags:["camote","papa","ají","leche","queso","aceituna"],pasos:"1. Cocinar camote al vapor y cortar en rodajas. 2. Licuar ají con queso fresco y leche light. 3. Bañar camotes con la crema. 4. Decorar con aceituna y huevo.",tip:"Camote en vez de papa = menor índice glucémico.",sustitucion:"Cashews en la crema para más proteína"},
+  {nombre:"Solterito Arequipeño",tiempo:"15 min",dificultad:"Fácil",calorias:"~190 kcal",cat:"entrada",ingredientes:"1 taza habas, 1 choclo, queso fresco, tomate, cebolla, aceitunas, rocoto",tags:["habas","choclo","maíz","queso","tomate","cebolla","aceituna","rocoto"],pasos:"1. Cocinar habas y desgranar choclo al vapor. 2. Picar tomate, cebolla y queso en cubos. 3. Mezclar con aceitunas. 4. Aliñar con limón y rocoto.",tip:"Ensalada arequipeña rica en proteína vegetal y fibra.",sustitucion:"Agrega quinua cocida para proteína completa"},
+  {nombre:"Ocopa Arequipeña Light",tiempo:"20 min",dificultad:"Media",calorias:"~210 kcal",cat:"entrada",ingredientes:"camote, huacatay, maní, ají, leche light, queso",tags:["camote","huacatay","maní","ají","leche","queso"],pasos:"1. Cocinar camote al vapor. 2. Licuar huacatay, maní, ají y leche light. 3. Bañar rodajas de camote. 4. Decorar con aceituna y huevo.",tip:"La ocopa es prima de la huancaína pero con huacatay.",sustitucion:"Usa leche de almendras para versión sin lácteos"},
+
+  // === SOPAS ===
+  {nombre:"Chupe de Camarones Light",tiempo:"30 min",dificultad:"Media",calorias:"~240 kcal",cat:"sopa",ingredientes:"300g camarones, papa, zapallo, leche light, huacatay, ají, huevo",tags:["camarones","papa","zapallo","leche","huacatay","ají","huevo","mariscos"],pasos:"1. Hacer caldo con cabezas de camarón. 2. Agregar papa y zapallo en cubos. 3. Agregar leche y camarones. 4. Servir con huevo pochado.",tip:"Sopa reconfortante arequipeña. Perfecta para días fríos.",sustitucion:"Más zapallo y menos papa para reducir carbohidratos"},
+  {nombre:"Aguadito de Pollo",tiempo:"25 min",dificultad:"Fácil",calorias:"~200 kcal",cat:"sopa",ingredientes:"pechuga, arroz, cilantro, arvejas, zanahoria, ají",tags:["pollo","arroz","cilantro","arvejas","zanahoria","ají"],pasos:"1. Cocinar pechuga y deshilachar. 2. Licuar cilantro con caldo. 3. Agregar arroz y verduras. 4. Cocinar 15 min y servir.",tip:"El mejor remedio peruano para el resfrío.",sustitucion:"Usa arroz integral para más fibra"},
+  {nombre:"Sopa de Quinua",tiempo:"25 min",dificultad:"Fácil",calorias:"~180 kcal",cat:"sopa",ingredientes:"quinua, zapallo, espinaca, papa, cebolla, ajo",tags:["quinua","zapallo","espinaca","papa","cebolla","ajo","vegano"],pasos:"1. Sofreír cebolla y ajo. 2. Agregar caldo y quinua. 3. Añadir zapallo y papa en cubos. 4. Al final agregar espinaca. Servir caliente.",tip:"Sopa andina reconfortante y muy nutritiva.",sustitucion:"Agrega huevo pochado para más proteína"},
+  {nombre:"Crema de Zapallo",tiempo:"20 min",dificultad:"Fácil",calorias:"~130 kcal",cat:"sopa",ingredientes:"500g zapallo, cebolla, ajo, leche light, queso fresco",tags:["zapallo","cebolla","ajo","leche","queso","vegano"],pasos:"1. Cocinar zapallo con cebolla y ajo. 2. Licuar todo. 3. Agregar leche light. 4. Servir con queso fresco rallado.",tip:"Baja en calorías y rica en vitamina A.",sustitucion:"Leche de coco para versión vegana"},
+
+  // === PLATOS PRINCIPALES ===
+  {nombre:"Lomo Saltado Light",tiempo:"20 min",dificultad:"Media",calorias:"~280 kcal",cat:"principal",ingredientes:"300g lomo fino, 2 tomates, 1 cebolla, sillao, ají amarillo, camote",tags:["carne","res","lomo","tomate","cebolla","sillao","soya","ají","camote"],pasos:"1. Cortar lomo en tiras y saltear a fuego alto 2 min. 2. Agregar cebolla y tomate en gajos. 3. Sazonar con sillao y vinagre. 4. Servir con camote al horno en bastones.",tip:"Fuego alto y cocinar rápido = carne jugosa.",sustitucion:"Camote horneado en vez de papa frita"},
+  {nombre:"Arroz con Pollo Saludable",tiempo:"35 min",dificultad:"Media",calorias:"~310 kcal",cat:"principal",ingredientes:"2 pechugas, arroz integral, cilantro, arvejas, zanahoria, ají",tags:["pollo","arroz","cilantro","arvejas","zanahoria","ají"],pasos:"1. Dorar pollo sin piel a la plancha. 2. Licuar cilantro con caldo. 3. Cocinar arroz integral con caldo verde. 4. Agregar arvejas y zanahoria. 5. Servir pollo sobre arroz.",tip:"El cilantro le da el color verde característico.",sustitucion:"Usa quinua en vez de arroz blanco"},
+  {nombre:"Ají de Gallina Light",tiempo:"30 min",dificultad:"Media",calorias:"~270 kcal",cat:"principal",ingredientes:"2 pechugas, pan integral, leche light, nueces, ají amarillo, aceitunas",tags:["pollo","gallina","pan","leche","nueces","ají","aceituna"],pasos:"1. Deshilachar pechuga cocida. 2. Licuar ají con leche light y pan integral remojado. 3. Cocinar la crema y agregar pollo y nueces. 4. Servir con aceituna y huevo duro.",tip:"Pan integral y leche light reducen calorías.",sustitucion:"Coliflor licuada en vez de pan para low-carb"},
+  {nombre:"Seco de Pollo con Frejoles",tiempo:"35 min",dificultad:"Media",calorias:"~300 kcal",cat:"principal",ingredientes:"2 pechugas, cilantro, frejoles, yuca, cebolla, ajo, ají",tags:["pollo","cilantro","frejoles","yuca","cebolla","ajo","ají"],pasos:"1. Dorar pollo sin piel. 2. Licuar cilantro con ají. 3. Cocinar a fuego bajo 20 min. 4. Servir con frejoles y yuca al vapor.",tip:"Guiso norteño peruano. El cilantro le da identidad.",sustitucion:"Yuca al vapor en vez de arroz blanco"},
+  {nombre:"Tacu Tacu de Lentejas",tiempo:"20 min",dificultad:"Fácil",calorias:"~260 kcal",cat:"principal",ingredientes:"1 taza lentejas cocidas, arroz del día anterior, cebolla, ajo, ají",tags:["lentejas","arroz","cebolla","ajo","ají","menestras","frejoles"],pasos:"1. Mezclar lentejas con arroz integral. 2. Formar tortitas compactas. 3. Dorar en sartén con poco aceite. 4. Acompañar con ensalada.",tip:"Nació para aprovechar sobras. ¡Cero desperdicio!",sustitucion:"Frejoles negros en vez de lentejas para variar"},
+  {nombre:"Pescado a lo Macho Light",tiempo:"25 min",dificultad:"Media",calorias:"~260 kcal",cat:"principal",ingredientes:"filete pescado, camarones, cebolla, tomate, ají panca, ají amarillo",tags:["pescado","camarones","mariscos","cebolla","tomate","ají"],pasos:"1. Dorar filete a la plancha. 2. Saltear mariscos con cebolla, tomate y ajíes. 3. Verter salsa sobre el pescado. 4. Servir con arroz integral.",tip:"Versión light sin fritura del clásico.",sustitucion:"Al horno en vez de frito"},
+  {nombre:"Pollo a la Brasa Casero",tiempo:"40 min",dificultad:"Media",calorias:"~290 kcal",cat:"principal",ingredientes:"pechuga o pierna, sillao, comino, ají panca, ajo, vinagre, cerveza",tags:["pollo","sillao","comino","ají","ajo","cerveza"],pasos:"1. Marinar pollo con sillao, ají panca, comino, ajo y cerveza 2h. 2. Hornear a 200°C por 35 min. 3. Voltear a mitad de cocción. 4. Servir con ensalada.",tip:"Al horno queda casi igual que a la brasa pero sin grasas.",sustitucion:"Sin piel = 40% menos grasa"},
+  {nombre:"Arroz Chaufa Saludable",tiempo:"15 min",dificultad:"Fácil",calorias:"~290 kcal",cat:"principal",ingredientes:"arroz integral del día anterior, pollo, huevo, cebolla china, sillao, jengibre",tags:["arroz","pollo","huevo","cebolla","sillao","soya","jengibre"],pasos:"1. Saltear pollo en cubos. 2. Agregar huevo revuelto. 3. Incorporar arroz frío y sillao. 4. Finalizar con cebolla china.",tip:"Fusión chifa (peruano-china). El arroz frío es clave.",sustitucion:"Usa arroz integral y más verduras"},
+  {nombre:"Cau Cau Light",tiempo:"30 min",dificultad:"Media",calorias:"~230 kcal",cat:"principal",ingredientes:"300g mondongo o pollo, papa, palillo, ají amarillo, hierbabuena, arvejas",tags:["pollo","papa","palillo","ají","hierbabuena","arvejas"],pasos:"1. Cocinar pollo en cubos. 2. Sofreír ají con palillo. 3. Agregar papa en cubos y caldo. 4. Servir con arroz y hierbabuena.",tip:"Versión con pollo es más ligera que con mondongo.",sustitucion:"Camote en vez de papa"},
+  {nombre:"Estofado de Pollo",tiempo:"30 min",dificultad:"Fácil",calorias:"~280 kcal",cat:"principal",ingredientes:"pechuga, papa, zanahoria, arvejas, tomate, cebolla, ajo",tags:["pollo","papa","zanahoria","arvejas","tomate","cebolla","ajo"],pasos:"1. Dorar pollo. 2. Sofreír cebolla, ajo y tomate. 3. Agregar papa, zanahoria y caldo. 4. Cocinar 20 min a fuego bajo.",tip:"Comfort food peruano. Económico y nutritivo.",sustitucion:"Camote en vez de papa para más nutrientes"},
+  {nombre:"Quinotto de Verduras",tiempo:"25 min",dificultad:"Fácil",calorias:"~220 kcal",cat:"principal",ingredientes:"1 taza quinua, zapallo, espinaca, cebolla, ajo, queso fresco",tags:["quinua","quinoa","zapallo","espinaca","cebolla","ajo","queso","vegano"],pasos:"1. Tostar quinua lavada 2 min. 2. Agregar caldo caliente poco a poco. 3. Saltear zapallo y espinaca aparte. 4. Mezclar todo con queso rallado.",tip:"La quinua peruana tiene todos los aminoácidos esenciales.",sustitucion:"Levadura nutricional para versión vegana"},
+
+  // === ENSALADAS ===
+  {nombre:"Ensalada de Quinua y Palta",tiempo:"10 min",dificultad:"Fácil",calorias:"~200 kcal",cat:"ensalada",ingredientes:"1 taza quinua cocida, 1 palta, tomate, pepino, limón, cilantro",tags:["quinua","quinoa","palta","aguacate","tomate","pepino","limón","cilantro"],pasos:"1. Enfriar quinua cocida. 2. Picar palta, tomate y pepino. 3. Mezclar todo. 4. Aliñar con limón, sal y cilantro fresco.",tip:"Perfecta para llevar al trabajo.",sustitucion:"Semillas de girasol para más proteína"},
+  {nombre:"Ensalada Nikkei de Salmón",tiempo:"15 min",dificultad:"Fácil",calorias:"~210 kcal",cat:"ensalada",ingredientes:"200g salmón fresco, palta, pepino, ajonjolí, sillao, limón, jengibre",tags:["salmón","pescado","palta","pepino","ajonjolí","sillao","limón","jengibre"],pasos:"1. Laminar salmón finamente. 2. Vinagreta: sillao + limón + jengibre. 3. Armar con pepino y palta. 4. Rociar vinagreta y ajonjolí tostado.",tip:"Fusión peruano-japonesa (Nikkei).",sustitucion:"Chía en vez de ajonjolí para más omega-3"},
+  {nombre:"Ensalada Criolla",tiempo:"5 min",dificultad:"Fácil",calorias:"~60 kcal",cat:"ensalada",ingredientes:"cebolla morada, tomate, ají limo, limón, cilantro",tags:["cebolla","tomate","ají","limón","cilantro","vegano"],pasos:"1. Cortar cebolla en juliana y remojar en agua fría. 2. Picar tomate en gajos y ají limo. 3. Mezclar con limón y cilantro. 4. Sazonar con sal.",tip:"Acompaña cualquier plato peruano. Básica y perfecta.",sustitucion:"Agrega palta para grasas saludables"},
+  {nombre:"Ensalada de Pallares",tiempo:"10 min",dificultad:"Fácil",calorias:"~180 kcal",cat:"ensalada",ingredientes:"pallares cocidos, tomate, cebolla, perejil, aceite de oliva, limón",tags:["pallares","menestras","tomate","cebolla","perejil","aceite","limón","vegano"],pasos:"1. Escurrir pallares cocidos. 2. Picar tomate y cebolla. 3. Mezclar todo con perejil. 4. Aliñar con aceite y limón.",tip:"Los pallares iqueños son ricos en proteína vegetal.",sustitucion:"Frejoles blancos si no encuentras pallares"},
+
+  // === DESAYUNOS ===
+  {nombre:"Smoothie de Lúcuma",tiempo:"5 min",dificultad:"Fácil",calorias:"~170 kcal",cat:"desayuno",ingredientes:"2 cdas pulpa lúcuma, 1 plátano, leche, avena, canela",tags:["lúcuma","plátano","leche","avena","canela","batido","fruta","desayuno"],pasos:"1. Licuar lúcuma con plátano y leche. 2. Agregar avena y canela. 3. Endulzar con miel si deseas. 4. Servir frío.",tip:"La lúcuma es un superalimento peruano rico en antioxidantes.",sustitucion:"Leche de almendras para versión sin lácteos"},
+  {nombre:"Avena con Chirimoya",tiempo:"10 min",dificultad:"Fácil",calorias:"~190 kcal",cat:"desayuno",ingredientes:"avena, chirimoya, leche, canela, miel",tags:["avena","chirimoya","leche","canela","miel","desayuno"],pasos:"1. Cocinar avena con leche. 2. Pelar y trozar chirimoya. 3. Servir avena con chirimoya encima. 4. Espolvorear canela.",tip:"La chirimoya peruana es dulce naturalmente.",sustitucion:"Yogurt griego en vez de leche"},
+  {nombre:"Tostadas con Palta y Huevo",tiempo:"10 min",dificultad:"Fácil",calorias:"~250 kcal",cat:"desayuno",ingredientes:"pan integral, palta, huevo, limón, sal, ají",tags:["pan","palta","huevo","limón","ají","desayuno"],pasos:"1. Tostar pan integral. 2. Aplastar palta con limón y sal. 3. Untar sobre tostadas. 4. Coronar con huevo pochado o cocido.",tip:"Combo perfecto: carbohidrato + grasa buena + proteína.",sustitucion:"Agrega semillas de chía encima"},
+  {nombre:"Quinua con Frutas",tiempo:"10 min",dificultad:"Fácil",calorias:"~210 kcal",cat:"desayuno",ingredientes:"quinua cocida, plátano, fresas, miel, yogurt",tags:["quinua","plátano","fresas","miel","yogurt","desayuno"],pasos:"1. Calentar quinua cocida con un poco de leche. 2. Picar frutas. 3. Servir quinua como bowl. 4. Agregar frutas, yogurt y miel.",tip:"Bowl andino: más proteína que la avena.",sustitucion:"Cualquier fruta de estación funciona"},
+
+  // === SNACKS / MERIENDAS ===
+  {nombre:"Choclo con Queso",tiempo:"15 min",dificultad:"Fácil",calorias:"~200 kcal",cat:"snack",ingredientes:"1 choclo, queso fresco",tags:["choclo","maíz","queso","snack"],pasos:"1. Cocinar choclo en agua con sal. 2. Servir con tajadas de queso fresco. 3. Opcional: agregar ají.",tip:"Merienda andina clásica. Simple y nutritiva.",sustitucion:"Queso de almendras para versión vegana"},
+  {nombre:"Camote Frito al Horno",tiempo:"25 min",dificultad:"Fácil",calorias:"~150 kcal",cat:"snack",ingredientes:"2 camotes, aceite de oliva, sal, paprika",tags:["camote","aceite","snack"],pasos:"1. Cortar camote en bastones. 2. Mezclar con poco aceite y paprika. 3. Hornear a 200°C por 20 min. 4. Servir con guacamole.",tip:"Alternativa saludable a las papas fritas.",sustitucion:"Agrega comino para sabor peruano"},
+  {nombre:"Hummus de Pallares",tiempo:"10 min",dificultad:"Fácil",calorias:"~160 kcal",cat:"snack",ingredientes:"pallares cocidos, tahini, limón, ajo, aceite de oliva",tags:["pallares","menestras","limón","ajo","aceite","vegano","snack"],pasos:"1. Licuar pallares con tahini y limón. 2. Agregar ajo y aceite. 3. Procesar hasta suave. 4. Servir con verduras crudas.",tip:"Versión peruana del hummus con pallares iqueños.",sustitucion:"Frejoles blancos si no hay pallares"},
+];
+
+// CATEGORÍAS DE RECETAS
+const RECIPE_CATS={entrada:'🥗 Entradas',sopa:'🍲 Sopas',principal:'🍽️ Principales',ensalada:'🥬 Ensaladas',desayuno:'🌅 Desayunos',snack:'🍿 Snacks'};
+
+let pantryItems=getGlobal('pantry',[]);
+let activeRecipeCat='todas';
+
+function renderPantry(){document.getElementById('pantryTags').innerHTML=pantryItems.map((item,i)=>`<span class="pantry-tag">${item}<span class="x" onclick="removePantry(${i})">×</span></span>`).join('')}
+function addPantryItem(){const input=document.getElementById('pantryInput');const val=input.value.trim();if(!val)return;val.split(',').forEach(v=>{v=v.trim().toLowerCase();if(v&&!pantryItems.includes(v))pantryItems.push(v)});setGlobal('pantry',pantryItems);input.value='';renderPantry()}
+function removePantry(i){pantryItems.splice(i,1);setGlobal('pantry',pantryItems);renderPantry()}
+renderPantry();
+
+function matchRecipes(items,cat){
+  let pool=RECIPE_DB;
+  if(cat&&cat!=='todas')pool=pool.filter(r=>r.cat===cat);
+  return pool.map(r=>{
+    const score=items.filter(item=>r.tags.some(tag=>tag.includes(item)||item.includes(tag))).length;
+    return{...r,score};
+  }).filter(r=>r.score>0).sort((a,b)=>b.score-a.score);
+}
+
+function filterByCat(cat){
+  activeRecipeCat=cat;
+  document.querySelectorAll('.rcat-btn').forEach(b=>b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  generateRecipes();
+}
+
+function generateRecipes(){
+  const res=document.getElementById('recipeResults');
+
+  if(pantryItems.length){
+    const matches=matchRecipes(pantryItems,activeRecipeCat);
+    if(matches.length){
+      showR(matches.slice(0,6));
+      res.innerHTML+=`<p style="text-align:center;font-size:.72rem;color:var(--text3);padding:6px">📚 ${matches.length} receta${matches.length>1?'s':''} encontrada${matches.length>1?'s':''} con tus ingredientes</p>`;
+    }else{
+      const pool=activeRecipeCat==='todas'?RECIPE_DB:RECIPE_DB.filter(r=>r.cat===activeRecipeCat);
+      showR([...pool].sort(()=>Math.random()-.5).slice(0,4));
+      res.innerHTML+=`<p style="text-align:center;font-size:.72rem;color:var(--text3);padding:6px">🎲 No hay match exacto — te sugerimos estas recetas</p>`;
+    }
+  }else{
+    const pool=activeRecipeCat==='todas'?RECIPE_DB:RECIPE_DB.filter(r=>r.cat===activeRecipeCat);
+    showR([...pool].sort(()=>Math.random()-.5).slice(0,4));
+    res.innerHTML+=`<p style="text-align:center;font-size:.72rem;color:var(--text3);padding:6px">💡 Agrega ingredientes para recetas personalizadas, o explora por categoría</p>`;
+  }
+}
+
+function showR(recipes){
+  document.getElementById('recipeResults').innerHTML=recipes.map(r=>{
+    const catLabel=RECIPE_CATS[r.cat]||r.cat;
+    return`<div class="recipe-card">
+      <h3>${r.nombre}</h3>
+      <div style="margin-bottom:8px">
+        <span class="tag">⏱ ${r.tiempo}</span>
+        <span class="tag tag-l">${r.dificultad}</span>
+        <span class="tag">🔥 ${r.calorias}</span>
+        <span class="tag" style="background:rgba(184,169,201,.12);color:var(--lavanda-deep)">${catLabel}</span>
+      </div>
+      <p style="margin-bottom:6px"><strong style="color:var(--text)">Ingredientes:</strong> ${r.ingredientes}</p>
+      <p style="margin-bottom:6px"><strong style="color:var(--text)">Preparación:</strong> ${r.pasos}</p>
+      ${r.sustitucion?`<p style="margin-bottom:6px;font-size:.78rem;color:var(--lavanda-deep)">🔄 ${r.sustitucion}</p>`:''}
+      <p style="font-style:italic;color:var(--terracota);font-size:.78rem">💡 ${r.tip}</p>
+    </div>`;
+  }).join('');
+}
+
+// BACKUP
+function getBackupStats(){let days=new Set(),size=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i),v=localStorage.getItem(k);size+=k.length+v.length;const m=k.match(/\d{4}-\d{2}-\d{2}/);if(m)days.add(m[0])}document.getElementById('bkDays').textContent=days.size;document.getElementById('bkSize').textContent=(size/1024).toFixed(1)+' KB'}
+getBackupStats();
+function showStatus(msg,type){const el=document.getElementById('backupStatus');el.textContent=msg;el.className='backup-status '+type;setTimeout(()=>{el.className='backup-status'},4000)}
+function exportData(){const data={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);data[k]=localStorage.getItem(k)}const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`vidasana-${TODAY}.json`;a.click();showStatus('✅ Exportado','success')}
+function importData(e){const file=e.target.files[0];if(!file)return;const r=new FileReader();r.onload=function(ev){try{const d=JSON.parse(ev.target.result);Object.keys(d).forEach(k=>localStorage.setItem(k,d[k]));showStatus('✅ Restaurado','success');setTimeout(()=>location.reload(),1500)}catch{showStatus('❌ Error','error')}};r.readAsText(file);e.target.value=''}
+function clearAllData(){if(!confirm('⚠️ ¿Seguro?'))return;if(!confirm('Irreversible'))return;localStorage.clear();location.reload()}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
