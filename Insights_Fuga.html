@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Insights de Fuga · NBC Empresas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--azul:#1F4592;--vclaro:#00BE50;--vcorp:#005F1E;--vsuave:#C6FFC0;--ink:#16203a;--gris:#737d92;--line:#e7eaf1;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:#fff;color:var(--ink);-webkit-font-smoothing:antialiased;}
+.shell{max-width:1080px;margin:0 auto;padding:0 28px 72px;}
+
+/* HERO */
+.hero{padding:46px 0 30px;border-bottom:1px solid var(--line);}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--vcorp);}
+.hero h1{font-size:34px;font-weight:300;line-height:1.18;margin:16px 0 0;max-width:880px;letter-spacing:-.01em;}
+.hero h1 b{font-weight:700;color:var(--azul);}
+.hero h1 .hl{font-weight:700;background:linear-gradient(transparent 62%,var(--vsuave) 62%);padding:0 2px;}
+.meta{font-size:12px;color:var(--gris);margin-top:18px;}
+.bar{display:flex;gap:0;margin-top:30px;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+.bar .cell{flex:1;padding:18px 20px;border-right:1px solid var(--line);}
+.bar .cell:last-child{border-right:0;}
+.bar .n{font-size:27px;font-weight:700;color:var(--azul);line-height:1;}
+.bar .n small{font-size:14px;font-weight:600;color:var(--gris);}
+.bar .l{font-size:11px;color:var(--gris);margin-top:7px;font-weight:500;}
+.bar .cell.warn .n{color:#c4314b;}
+
+/* INSIGHTS */
+.sec-label{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--gris);margin:48px 0 6px;}
+.sec-label b{color:var(--azul);}
+.ins{display:grid;grid-template-columns:64px 1fr;gap:22px;padding:30px 0;border-bottom:1px solid var(--line);}
+.rank{font-size:13px;font-weight:700;color:var(--vclaro);}
+.rank .num{display:block;font-size:40px;font-weight:800;color:var(--azul);line-height:.9;letter-spacing:-.03em;}
+.body .tag{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--vcorp);}
+.body h2{font-size:21px;font-weight:600;line-height:1.3;margin:8px 0 10px;letter-spacing:-.01em;}
+.body h2 em{font-style:normal;color:var(--azul);font-weight:700;}
+.body p{font-size:14px;line-height:1.6;color:#3a4357;max-width:760px;}
+.body p strong{color:var(--ink);font-weight:600;}
+.impact{display:flex;align-items:center;gap:12px;margin-top:16px;}
+.track{flex:1;max-width:340px;height:9px;background:var(--line);border-radius:6px;overflow:hidden;}
+.fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--azul),var(--vclaro));}
+.impact .cap{font-size:11.5px;color:var(--gris);font-weight:500;white-space:nowrap;}
+.action{display:inline-flex;align-items:center;gap:8px;margin-top:16px;background:#f4faf6;border:1px solid var(--vsuave);border-radius:8px;padding:10px 14px;font-size:13px;font-weight:500;color:var(--vcorp);}
+.action b{color:var(--vcorp);font-weight:700;}
+.arrow{color:var(--vclaro);font-weight:800;}
+
+/* CLOSE */
+.close{margin-top:46px;background:var(--azul);border-radius:18px;padding:34px 38px;color:#fff;}
+.close .eyebrow{color:var(--vsuave);}
+.close h3{font-size:22px;font-weight:600;margin:12px 0 18px;}
+.close ol{list-style:none;counter-reset:s;display:grid;gap:14px;}
+.close li{counter-increment:s;display:grid;grid-template-columns:30px 1fr;gap:14px;font-size:14px;line-height:1.5;}
+.close li::before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--vclaro);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;}
+.close li b{font-weight:600;}
+.foot{margin-top:30px;font-size:11px;color:var(--gris);text-align:center;}
+.dot{color:var(--vclaro);}
+
+@media(max-width:680px){
+ .hero h1{font-size:25px;} .bar{flex-wrap:wrap;} .bar .cell{flex:1 1 50%;border-bottom:1px solid var(--line);}
+ .ins{grid-template-columns:1fr;gap:6px;} .rank .num{font-size:30px;}
+}
+</style></head><body>
+<div class="shell">
+
+  <header class="hero">
+    <div class="eyebrow">NBC Empresas · Banca Negocio · Análisis de fuga</div>
+    <h1>Antes de irse, <span class="hl">7 de cada 10</span> clientes ya estaban en nuestro funnel. A la <b>mayoría nunca los contactamos</b>.</h1>
+    <div class="meta">Compras por otra entidad financiera · febrero 2025 – febrero 2026 · 1,357 créditos · Fuente: DATA_FUGA.xlsx</div>
+    <div class="bar">
+      <div class="cell"><div class="n">1,357</div><div class="l">créditos fugados</div></div>
+      <div class="cell"><div class="n">S/ 116.8<small> MM</small></div><div class="l">saldo fugado</div></div>
+      <div class="cell"><div class="n">72<small>%</small></div><div class="l">estaba en el funnel</div></div>
+      <div class="cell warn"><div class="n">437</div><div class="l">carterizados sin gestión</div></div>
+    </div>
+  </header>
+
+  <div class="sec-label">Hallazgos priorizados por <b>impacto en retención</b></div>
+
+  <article class="ins">
+    <div class="rank"><span class="num">01</span>Gestión</div>
+    <div class="body">
+      <div class="tag">Oportunidad de retención perdida</div>
+      <h2>Los teníamos identificados, pero <em>solo gestionamos al 43%</em></h2>
+      <p>De los 1,357 clientes fugados, <strong>979 (72%) figuraban en el funnel comercial</strong> el mes en que los compró otra entidad. Sin embargo, apenas el 43% registró gestión. <strong>437 clientes carterizados —con ejecutivo asignado— se fugaron sin un solo contacto registrado.</strong> La fuga no es un problema de detección: es un problema de ejecución.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:72%"></div></div><div class="cap">72% del universo fugado era abordable</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Rutina de contacto obligatoria sobre P1 carterizado, con SLA y registro de gestión auditable.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">02</span>Saldo</div>
+    <div class="body">
+      <div class="tag">Concentración del valor</div>
+      <h2>El 47% de los créditos explica el <em>70% del saldo fugado</em></h2>
+      <p>Los créditos entre <strong>S/100k y S/500k</strong> son el 47% del volumen pero concentran cerca de <strong>S/82 MM</strong> del saldo perdido. Retener por número de casos diluye el esfuerzo; el valor está en pocos créditos grandes.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:70%"></div></div><div class="cap">~70% del saldo en S/100k–500k</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Alertas de retención priorizadas por saldo en riesgo, no por cantidad de clientes.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">03</span>Tendencia</div>
+    <div class="body">
+      <div class="tag">La fuga se está acelerando</div>
+      <h2>La fuga mensual se <em>multiplicó por 2.6</em> en un año</h2>
+      <p>De <strong>57 créditos en feb-25 a 151 en feb-26</strong>, con el saldo mensual creciendo de S/4.2 MM a S/14.4 MM. No es un evento puntual: es una tendencia sostenida que erosiona la cartera mes a mes.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:100%"></div></div><div class="cap">2.6× más fuga vs. inicio del periodo</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Meta mensual de retención y tablero de seguimiento con corte por canal y supervisor.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">04</span>Precio</div>
+    <div class="body">
+      <div class="tag">Fuga por tasa</div>
+      <h2>Casi <em>1 de cada 5</em> se fugó con tasa ≥ 20%</h2>
+      <p>El 18% de los créditos fugados tenía tasa de desembolso de 20% o más: el perfil clásico de cliente recapturado por una mejor oferta de precio. Son los más sensibles a una propuesta de fidelización temprana.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:18%"></div></div><div class="cap">18% de la fuga con tasa ≥ 20%</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Repricing proactivo u oferta de fidelización para la cola de tasa alta antes de la ventana de fuga.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">05</span>Tiempo</div>
+    <div class="body">
+      <div class="tag">Ventana de fuga por canal</div>
+      <h2>Hay <em>dos relojes de fuga</em> distintos</h2>
+      <p>Tiendas y TLV pierden créditos <strong>maduros (~9 meses)</strong>; Vendors y Tiendas Virtuales muestran <strong>fuga temprana (~2–5 meses)</strong>, señal de originación sensible al precio o sobre-oferta de la competencia. La antigüedad mediana global es de 7 meses: esa es la ventana de retención típica.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:58%"></div></div><div class="cap">mediana de 7 meses hasta la fuga</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Calendario de contacto diferenciado por canal: temprano en Vendors/T. Virtuales, sostenido en Tiendas/TLV.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">06</span>Canal</div>
+    <div class="body">
+      <div class="tag">Dónde se concentra</div>
+      <h2>Tiendas y TLV concentran el <em>84% del saldo fugado</em></h2>
+      <p>Entre ambos canales se pierde S/97.6 MM de los S/116.8 MM totales. El foco operativo de retención puede cubrir la mayor parte del valor en riesgo con dos frentes.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:84%"></div></div><div class="cap">84% del saldo en Tiendas + TLV</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Concentrar el plan de retención en estos dos canales antes de extenderlo.</span></div>
+    </div>
+  </article>
+
+  <article class="ins">
+    <div class="rank"><span class="num">07</span>Modelo</div>
+    <div class="body">
+      <div class="tag">El modelo ya los marcaba</div>
+      <h2>La mayoría de fugados en funnel eran <em>prioridad P1</em></h2>
+      <p>Los clientes que se fugaron y estaban en el funnel eran, en su mayoría, P1: el modelo de priorización ya los señalaba como críticos. El cuello de botella no está en el modelo, sino en convertir esa señal en gestión efectiva.</p>
+      <div class="impact"><div class="track"><div class="fill" style="width:78%"></div></div><div class="cap">P1 domina el universo en funnel</div></div>
+      <div class="action"><span class="arrow">→</span><span><b>Acción.</b> Cerrar el lazo: del score de prioridad a una acción comercial medible y trazable.</span></div>
+    </div>
+  </article>
+
+  <section class="close">
+    <div class="eyebrow">De los hallazgos a la acción</div>
+    <h3>Tres movimientos que atacan el 70% del saldo en riesgo</h3>
+    <ol>
+      <li><span><b>Activar gestión sobre lo identificado.</b> Contacto obligatorio y trazable sobre P1 carterizado en el funnel — es el 72% del universo y hoy no se gestiona la mayoría.</span></li>
+      <li><span><b>Priorizar por saldo, no por volumen.</b> Alertas tempranas en créditos de S/100k–500k y en la cola de tasa ≥20%, donde se concentra el valor.</span></li>
+      <li><span><b>Diferenciar por canal.</b> Contacto temprano en Vendors y Tiendas Virtuales; seguimiento sostenido en Tiendas y TLV, que concentran el 84% del saldo.</span></li>
+    </ol>
+  </section>
+
+  <div class="foot">Interbank · NBC Empresas — Advanced Analytics &amp; IA <span class="dot">·</span> Documento de trabajo interno</div>
+
+</div>
+</body></html>

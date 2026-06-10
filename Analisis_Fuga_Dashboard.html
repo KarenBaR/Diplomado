@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Análisis de Fuga · Créditos comprados por otra entidad</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--azul:#1F4592;--vclaro:#00BE50;--vcorp:#005F1E;--vsuave:#C6FFC0;--gris:#6b7280;--bg:#f4f6fa;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:var(--bg);color:#1a1a2e;padding:28px 32px 60px;}
+.head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid var(--vclaro);padding-bottom:14px;margin-bottom:24px;}
+.head h1{color:var(--azul);font-size:25px;font-weight:700;line-height:1.15;}
+.head p{color:var(--vcorp);font-size:12.5px;font-weight:500;margin-top:4px;}
+.head .tag{background:var(--azul);color:#fff;font-size:11px;font-weight:600;padding:7px 14px;border-radius:20px;white-space:nowrap;}
+.kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:12px;margin-bottom:26px;}
+.kpi{background:#fff;border-radius:14px;padding:16px 14px;box-shadow:0 2px 10px rgba(31,69,146,.06);border-top:3px solid var(--vclaro);}
+.kpi .v{font-size:23px;font-weight:700;color:var(--azul);line-height:1;}
+.kpi .v small{font-size:13px;font-weight:600;color:var(--gris);}
+.kpi .l{font-size:10.5px;color:var(--gris);margin-top:7px;font-weight:500;line-height:1.25;}
+.kpi.alert{border-top-color:#e23;} .kpi.alert .v{color:#c41e3a;}
+.section{font-size:15px;font-weight:700;color:#fff;background:var(--azul);padding:9px 16px;border-radius:8px;margin:8px 0 18px;display:flex;align-items:center;gap:10px;}
+.section span{background:var(--vclaro);color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;}
+.grid{display:grid;gap:16px;margin-bottom:30px;}
+.g3{grid-template-columns:1.6fr 1fr 1fr;} .g2{grid-template-columns:1fr 1fr;} .g22{grid-template-columns:1.3fr 1fr;}
+.card{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 2px 10px rgba(31,69,146,.06);}
+.card h3{font-size:13px;font-weight:600;color:var(--azul);margin-bottom:4px;}
+.card .sub{font-size:10.5px;color:var(--gris);margin-bottom:12px;}
+.wrap{position:relative;height:230px;} .wrap.tall{height:280px;}
+.note{background:var(--vsuave);border-left:4px solid var(--vcorp);border-radius:8px;padding:14px 18px;margin-bottom:28px;}
+.note b{color:var(--vcorp);} .note ul{margin:6px 0 0 18px;} .note li{font-size:12px;margin:5px 0;color:#1a1a2e;}
+.matrix{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;font-size:12px;}
+.matrix div{padding:14px 10px;border-radius:8px;text-align:center;font-weight:600;}
+.mh{background:var(--azul);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;}
+.mc{color:#fff;} .mc b{display:block;font-size:22px;}
+.foot{text-align:center;font-size:10.5px;color:var(--gris);margin-top:20px;}
+</style></head><body>
+<div class="head"><div><h1>Análisis de Fuga — Créditos comprados por otra entidad</h1>
+<p>NBC Empresas · Periodo de compra 02-2025 a 02-2026 · Fuente: DATA_FUGA.xlsx</p></div>
+<div class="tag">Banca Negocio · Interbank</div></div>
+
+<div class="kpis">
+<div class="kpi"><div class="v" id="k1"></div><div class="l">Créditos fugados</div></div>
+<div class="kpi"><div class="v" id="k2"></div><div class="l">Saldo fugado total</div></div>
+<div class="kpi"><div class="v" id="k3"></div><div class="l">Monto desembolsado original</div></div>
+<div class="kpi"><div class="v" id="k4"></div><div class="l">Tasa desembolso prom.</div></div>
+<div class="kpi"><div class="v" id="k5"></div><div class="l">Antigüedad prom. del crédito</div></div>
+<div class="kpi alert"><div class="v" id="k6"></div><div class="l">Estaba en el funnel comercial</div></div>
+<div class="kpi alert"><div class="v" id="k7"></div><div class="l">En funnel y NO gestionado</div></div>
+<div class="kpi"><div class="v" id="k8"></div><div class="l">Clientes carterizados</div></div>
+</div>
+
+<div class="section"><span>1</span>Perfil de la colocación fugada (desembolso original)</div>
+<div class="grid g3">
+<div class="card"><h3>Evolución de la fuga por mes de compra</h3><div class="sub">N° de créditos (barras) y saldo fugado en S/ MM (línea)</div><div class="wrap tall"><canvas id="c_evo"></canvas></div></div>
+<div class="card"><h3>Canal del desembolso (CANAL_FINAL)</h3><div class="sub">Distribución de créditos fugados</div><div class="wrap tall"><canvas id="c_canal"></canvas></div></div>
+<div class="card"><h3>Antigüedad del crédito por canal</h3><div class="sub">Meses promedio entre desembolso y compra</div><div class="wrap tall"><canvas id="c_ant"></canvas></div></div>
+</div>
+<div class="grid g2">
+<div class="card"><h3>Campañas de origen (CAMPANA_BASE)</h3><div class="sub">Top 8 campañas del desembolso original</div><div class="wrap"><canvas id="c_camp"></canvas></div></div>
+<div class="card"><h3>Saldo fugado por canal (S/ MM)</h3><div class="sub">Concentración del saldo perdido</div><div class="wrap"><canvas id="c_canalsaldo"></canvas></div></div>
+</div>
+
+<div class="section"><span>2</span>Perfil en el funnel comercial al mes de la compra</div>
+<div class="grid g3">
+<div class="card"><h3>Cobertura y gestión por mes</h3><div class="sub">% en funnel y % gestionado de los que estaban en funnel</div><div class="wrap tall"><canvas id="c_cob"></canvas></div></div>
+<div class="card"><h3>Embudo de oportunidad perdida</h3><div class="sub">¿Hasta dónde llegamos antes de la fuga?</div><div class="wrap tall"><canvas id="c_emb"></canvas></div></div>
+<div class="card"><h3>Prioridad final (PRIORIDAD_GRUPO_FINAL)</h3><div class="sub">Distribución de los fugados con funnel</div><div class="wrap tall"><canvas id="c_prio"></canvas></div></div>
+</div>
+<div class="grid g3">
+<div class="card"><h3>Canal del funnel (ID_CANAL_FUNNEL)</h3><div class="sub">1 Tiendas · 2 Tiendas Virtuales · 3 Televentas</div><div class="wrap"><canvas id="c_cfn"></canvas></div></div>
+<div class="card"><h3>Campañas del funnel (CAMPANHA_FUNNEL)</h3><div class="sub">Top 6 campañas activas al momento de la fuga</div><div class="wrap"><canvas id="c_camf"></canvas></div></div>
+<div class="card"><h3>Supervisores con más fuga</h3><div class="sub">Créditos fugados en funnel por supervisor (Top 7)</div><div class="wrap"><canvas id="c_sup"></canvas></div></div>
+</div>
+<div class="grid g22">
+<div class="card"><h3>Cruce crítico: ¿carterizado y gestionado?</h3><div class="sub">De los clientes que estaban en el funnel</div>
+<div class="matrix" style="margin-top:8px">
+<div></div><div class="mh">Gestionado</div><div class="mh">NO gestionado</div>
+<div class="mh">Carterizado</div><div class="mc" style="background:var(--vclaro)"><b id="m1"></b>cart. gestionado</div><div class="mc" style="background:#c41e3a"><b id="m2"></b>cart. SIN gestión</div>
+<div class="mh">No carterizado</div><div class="mc" style="background:var(--azul)"><b id="m3"></b>no cart. gestionado</div><div class="mc" style="background:var(--gris)"><b id="m4"></b>no cart. sin gestión</div>
+</div></div>
+<div class="note" style="margin:0;align-self:start"><b>Lecturas clave</b>
+<ul>
+<li><b>7 de cada 10</b> créditos fugados estaban en el funnel: los teníamos identificados.</li>
+<li>De los que estaban en funnel, solo <b>~43%</b> fueron gestionados; el resto se fue sin contacto.</li>
+<li><b>437 clientes carterizados</b> se fugaron <b>sin gestión registrada</b>: foco inmediato de retención.</li>
+<li>La fuga y el saldo perdido <b>crecen mes a mes</b> (de 57 a 151 créditos/mes).</li>
+<li>Tiendas y TLV: créditos más antiguos (~9m). Vendors y T. Virtuales: <b>fuga temprana</b> (~2-5m).</li>
+</ul></div>
+</div>
+
+<div class="section"><span>3</span>Rangos de monto, saldo y tasa</div>
+<div class="grid g3">
+<div class="card"><h3>Rango de monto desembolsado</h3><div class="sub">Créditos (barras) y saldo fugado S/ MM (línea)</div><div class="wrap tall"><canvas id="c_rmonto"></canvas></div></div>
+<div class="card"><h3>Rango de saldo fugado</h3><div class="sub">Créditos (barras) y saldo fugado S/ MM (línea)</div><div class="wrap tall"><canvas id="c_rsaldo"></canvas></div></div>
+<div class="card"><h3>Rango de tasa de desembolso</h3><div class="sub">Créditos (barras) y saldo fugado S/ MM (línea)</div><div class="wrap tall"><canvas id="c_rtasa"></canvas></div></div>
+</div>
+
+<div class="section"><span>4</span>Composición de la fuga por periodo (barras apiladas)</div>
+<div class="grid g2">
+<div class="card"><h3>Créditos por canal de desembolso</h3><div class="sub">CANAL_FINAL · apilado por mes de compra</div><div class="wrap tall"><canvas id="s_canal"></canvas></div></div>
+<div class="card"><h3>Saldo fugado por canal (S/ MM)</h3><div class="sub">CANAL_FINAL · apilado por mes de compra</div><div class="wrap tall"><canvas id="s_saldo"></canvas></div></div>
+</div>
+<div class="grid" style="grid-template-columns:1fr">
+<div class="card"><h3>Monto desembolsado por canal de desembolso (S/ MM)</h3><div class="sub">CANAL_FINAL · apilado por mes de compra — monto original colocado que terminó fugándose</div><div class="wrap tall"><canvas id="s_montocanal"></canvas></div></div>
+</div>
+<div class="grid g2">
+<div class="card"><h3>Saldo fugado por canal de gestión (ID_CANAL)</h3><div class="sub">1 Tiendas · 2 Tiendas Virtuales · 3 Televentas — saldo cancelado en S/ MM, apilado por mes</div><div class="wrap tall"><canvas id="s_saldoidc"></canvas></div></div>
+<div class="card"><h3>Saldo fugado: cartera vs no carterizado</h3><div class="sub">FLG_ES_CARTERA=1 es cartera · el resto no carterizado — S/ MM apilado por mes</div><div class="wrap tall"><canvas id="s_saldocart"></canvas></div></div>
+</div>
+<div class="note" style="margin-bottom:30px">
+<b>Cartera vs no carterizado.</b> Los <b>736 créditos carterizados</b> concentran <b>S/ 71.6 MM</b> de saldo fugado (61% del total) y solo el 41% recibió gestión. Los <b>621 no carterizados</b> suman S/ 45.2 MM con apenas 20% de gestión. Por ID_CANAL, el saldo fugado se concentra en Tiendas (S/ 64.6 MM); Tiendas Virtuales aporta S/ 22.3 MM y hay S/ 26.1 MM en clientes fuera del funnel.
+</div>
+<div class="grid g2">
+<div class="card"><h3>Créditos por rango de monto</h3><div class="sub">Monto desembolsado · apilado por mes</div><div class="wrap tall"><canvas id="s_monto"></canvas></div></div>
+<div class="card"><h3>Créditos por rango de tasa</h3><div class="sub">Tasa de desembolso · apilado por mes</div><div class="wrap tall"><canvas id="s_tasa"></canvas></div></div>
+</div>
+<div class="grid g2">
+<div class="card"><h3>Estado de gestión en el funnel</h3><div class="sub">Gestionado · no gestionado · fuera de funnel — apilado por mes</div><div class="wrap tall"><canvas id="s_gest"></canvas></div></div>
+<div class="card"><h3>Créditos por prioridad final</h3><div class="sub">PRIORIDAD_GRUPO_FINAL · apilado por mes</div><div class="wrap tall"><canvas id="s_prio"></canvas></div></div>
+</div>
+<div class="foot">Interbank · NBC Empresas — Advanced Analytics &amp; IA · Documento de trabajo interno</div>
+
+<script>
+const D={"meses": ["02-25", "03-25", "04-25", "05-25", "06-25", "07-25", "08-25", "09-25", "10-25", "11-25", "12-25", "01-26", "02-26"], "creditos": [57, 56, 57, 71, 84, 101, 99, 146, 141, 121, 127, 146, 151], "saldo": [4.22, 4.18, 4.29, 5.78, 6.83, 9.51, 7.8, 12.85, 12.47, 11.53, 11.07, 11.89, 14.42], "monto": [5.51, 5.05, 5.46, 7.77, 9.72, 12.4, 10.16, 17.18, 17.73, 15.56, 15.89, 18.8, 21.08], "en_funnel_pct": [54.4, 48.2, 40.4, 60.6, 59.5, 64.4, 72.7, 69.2, 77.3, 85.1, 88.2, 80.8, 82.8], "gest_pct": [38.7, 44.4, 34.8, 23.3, 36.0, 43.1, 38.9, 43.6, 47.7, 43.7, 42.9, 55.1, 42.4], "canal_final": {"lab": ["TLV", "TIENDAS", "VENDORS", "TIENDAS VIRTUALES", "ECOSISTEMAS"], "val": [612, 553, 101, 52, 1]}, "canal_final_saldo": {"ECOSISTEMAS": 0.1, "TIENDAS": 58.1, "TIENDAS VIRTUALES": 6.3, "TLV": 39.5, "VENDORS": 11.6}, "ant_canal": {"ECOSISTEMAS": 2.0, "TIENDAS": 8.9, "TIENDAS VIRTUALES": 2.2, "TLV": 8.5, "VENDORS": 4.8}, "campana_base": {"lab": ["Impulso Mixto", "Nuevo Aprobado", "CDD APROBADO", "GIRO DE LINEA", "Ágil Recurrente CEM", "Impulso Solo", "Nuevo Aprobado Ágil", "Nuevo pre Aprobado"], "val": [178, 172, 157, 148, 127, 116, 93, 74]}, "embudo": {"fugados": 1357, "en_funnel": 979, "gestionados": 423, "carterizados": 736}, "prioridad": {"lab": ["P1", "P2", "P5", "P3", "P4"], "val": [768, 107, 88, 14, 2]}, "canal_funnel": {"lab": ["Tiendas", "Tiendas Virtuales", "Televentas"], "val": [625, 309, 45]}, "campanha_funnel": {"lab": ["Gestion Cartera", "Recurrente Ágil CEM", "Recurrente Agil Estacional", "Oportunidad Garantías", "Recurrente Aprobado CD", "Giro de Línea"], "val": [390, 301, 73, 49, 39, 22]}, "supervisores": {"lab": ["Pecho Llacta", "Palpa Ramos Luis Carlos", "Loayza Rivas", "Caceda Vertiz", "Ugaz Vasquez Maria Susana", "Casimiro Fernandez Edith Doris", "Roca Ramos"], "val": [171, 123, 110, 108, 108, 89, 85]}, "cruce": {"cart_gest": 299, "cart_nogest": 437, "nocart_gest": 80, "nocart_nogest": 118}, "kpi": {"creditos": 1357, "saldo": 116.8, "monto": 162.3, "tasa": 17.4, "antig": 8.1, "pct_funnel": 72.0, "no_gest": 556, "carter": 736}, "r_monto": {"lab": ["≤25k", "25-50k", "50-100k", "100-200k", "200-500k", ">500k"], "n": [29, 113, 531, 434, 206, 6], "saldo": [0.4, 2.9, 26.2, 42.7, 39.4, 3.9]}, "r_saldo": {"lab": ["≤25k", "25-50k", "50-100k", "100-200k", "200-500k", ">500k"], "n": [234, 280, 433, 312, 93, 4], "saldo": [3.2, 10.6, 30.6, 43.7, 25.3, 3.4]}, "r_tasa": {"lab": ["<14%", "14-16%", "16-18%", "18-20%", "20-25%", "≥25%"], "n": [62, 384, 345, 291, 208, 29], "saldo": [12.7, 29.2, 38.8, 23.0, 10.8, 1.2]}, "stk_canal": {"TIENDAS": [35, 24, 24, 29, 35, 45, 36, 54, 54, 38, 46, 68, 65], "TLV": [18, 22, 25, 33, 37, 45, 54, 66, 67, 59, 62, 57, 67], "TIENDAS VIRTUALES": [0, 0, 0, 0, 4, 3, 3, 6, 7, 6, 9, 10, 4], "VENDORS": [0, 6, 3, 6, 3, 5, 4, 12, 10, 18, 10, 11, 13], "ECOSISTEMAS": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]}, "stk_monto": {"≤25k": [4, 2, 2, 1, 0, 4, 3, 6, 0, 1, 3, 1, 2], "25-50k": [9, 6, 2, 14, 7, 6, 9, 5, 9, 12, 14, 14, 6], "50-100k": [22, 20, 25, 24, 33, 37, 46, 60, 55, 44, 53, 56, 56], "100-200k": [13, 21, 18, 21, 24, 30, 28, 44, 54, 49, 34, 45, 53], "200-500k": [4, 3, 5, 8, 15, 21, 11, 23, 19, 14, 22, 30, 31], ">500k": [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1]}, "stk_tasa": {"<14%": [3, 1, 1, 4, 4, 6, 5, 9, 4, 6, 6, 6, 7], "14-16%": [16, 13, 21, 14, 18, 29, 36, 43, 45, 27, 40, 37, 45], "16-18%": [10, 7, 10, 16, 15, 25, 24, 33, 40, 35, 30, 53, 47], "18-20%": [10, 18, 6, 19, 20, 26, 19, 32, 31, 25, 31, 26, 28], "20-25%": [14, 12, 14, 14, 21, 11, 10, 18, 14, 28, 18, 17, 17], "≥25%": [0, 1, 0, 1, 2, 1, 3, 3, 4, 0, 2, 7, 5]}, "stk_prio": {"P1": [24, 23, 22, 39, 43, 52, 52, 88, 98, 92, 100, 27, 108], "P2": [6, 4, 1, 4, 5, 9, 15, 12, 11, 11, 12, 2, 15], "P3": [1, 0, 0, 0, 2, 4, 3, 1, 0, 0, 0, 1, 2], "P4": [0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0], "P5": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 88, 0]}, "stk_gest": {"En funnel · gestionado": [12, 12, 8, 10, 18, 28, 28, 44, 52, 45, 48, 65, 53], "En funnel · no gestionado": [19, 15, 15, 33, 32, 37, 44, 57, 57, 58, 64, 53, 72], "Fuera de funnel": [26, 29, 34, 28, 34, 36, 27, 45, 32, 18, 15, 28, 26]}, "stk_saldo_canal": {"TIENDAS": [3.42, 2.43, 1.94, 3.03, 3.65, 5.45, 3.12, 6.66, 5.04, 3.58, 5.53, 6.27, 7.96], "TLV": [0.68, 1.2, 1.88, 1.96, 2.35, 3.47, 4.13, 3.82, 5.0, 4.12, 3.39, 3.47, 4.04], "TIENDAS VIRTUALES": [0.0, 0.0, 0.0, 0.0, 0.45, 0.24, 0.23, 0.94, 1.38, 0.85, 0.84, 0.97, 0.45], "VENDORS": [0.0, 0.47, 0.35, 0.75, 0.22, 0.3, 0.27, 1.26, 0.92, 2.99, 1.31, 1.17, 1.57], "ECOSISTEMAS": [0.0, 0.0, 0.0, 0.0, 0.11, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, "stk_monto_canal": {"TIENDAS": [4.65, 3.12, 2.85, 4.51, 5.41, 7.42, 4.38, 9.13, 8.11, 5.24, 6.76, 10.15, 11.57], "TLV": [0.85, 1.4, 2.21, 2.4, 3.29, 4.27, 5.21, 5.33, 6.86, 5.84, 5.75, 5.61, 6.66], "TIENDAS VIRTUALES": [0.0, 0.0, 0.0, 0.0, 0.58, 0.34, 0.22, 1.06, 1.54, 0.95, 1.73, 1.31, 0.58], "VENDORS": [0.0, 0.53, 0.41, 0.85, 0.32, 0.37, 0.34, 1.67, 1.21, 3.52, 1.66, 1.73, 2.27], "ECOSISTEMAS": [0.0, 0.0, 0.0, 0.0, 0.12, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, "stk_saldo_idcanal": {"Tiendas": [2.79, 2.06, 1.09, 2.34, 3.04, 4.74, 3.39, 6.97, 5.37, 6.44, 6.61, 9.01, 10.73], "Tiendas Virtuales": [0.0, 0.0, 0.53, 1.36, 1.47, 1.86, 2.21, 2.28, 4.36, 3.43, 3.03, 0.63, 1.16], "Televentas": [0.05, 0.26, 0.11, 0.12, 0.32, 0.28, 0.3, 0.13, 0.38, 0.53, 0.38, 0.51, 0.5], "Fuera de funnel": [1.37, 1.87, 2.56, 1.97, 2.0, 2.63, 1.9, 3.47, 2.36, 1.14, 1.05, 1.73, 2.03]}, "stk_saldo_cartera": {"Cartera": [0.0, 0.0, 0.0, 0.0, 4.31, 6.6, 5.33, 8.58, 9.45, 8.69, 9.43, 8.4, 10.84], "No carterizado": [4.22, 4.18, 4.29, 5.78, 2.52, 2.91, 2.47, 4.27, 3.02, 2.84, 1.64, 3.49, 3.57]}, "stk_cred_cartera": {"Cartera": [0, 0, 0, 0, 41, 64, 64, 86, 100, 90, 101, 90, 100], "No carterizado": [57, 56, 57, 71, 43, 37, 35, 60, 41, 31, 26, 56, 51]}, "res_cartera": {"Cartera": {"n": 736, "saldo": 71.6, "gest": 41.0}, "No carterizado": {"n": 621, "saldo": 45.2, "gest": 20.0}}, "res_idcanal": {"Tiendas": 64.6, "Tiendas Virtuales": 22.3, "Televentas": 3.9, "Fuera de funnel": 26.1}};
+const AZUL='#1F4592',VC='#00BE50',VCORP='#005F1E',VSU='#C6FFC0',GRIS='#9aa3b2';
+const PALETA=[AZUL,VC,VCORP,'#5b8def','#7ed957','#a0aec0','#003d7a'];
+Chart.defaults.font.family='Poppins';Chart.defaults.font.size=11;Chart.defaults.color='#555';
+const fmt=n=>n.toLocaleString('es-PE');
+document.getElementById('k1').innerHTML=fmt(D.kpi.creditos);
+document.getElementById('k2').innerHTML='S/ '+D.kpi.saldo+'<small> MM</small>';
+document.getElementById('k3').innerHTML='S/ '+D.kpi.monto+'<small> MM</small>';
+document.getElementById('k4').innerHTML=D.kpi.tasa+'<small>%</small>';
+document.getElementById('k5').innerHTML=D.kpi.antig+'<small> meses</small>';
+document.getElementById('k6').innerHTML=D.kpi.pct_funnel+'<small>%</small>';
+document.getElementById('k7').innerHTML=fmt(D.kpi.no_gest);
+document.getElementById('k8').innerHTML=fmt(D.kpi.carter);
+document.getElementById('m1').textContent=D.cruce.cart_gest;
+document.getElementById('m2').textContent=D.cruce.cart_nogest;
+document.getElementById('m3').textContent=D.cruce.nocart_gest;
+document.getElementById('m4').textContent=D.cruce.nocart_nogest;
+const noLeg={legend:{display:false}};
+new Chart(c_evo,{data:{labels:D.meses,datasets:[
+{type:'bar',label:'Créditos',data:D.creditos,backgroundColor:AZUL,borderRadius:4,yAxisID:'y'},
+{type:'line',label:'Saldo fugado (S/ MM)',data:D.saldo,borderColor:VC,backgroundColor:VC,tension:.35,borderWidth:3,pointRadius:3,yAxisID:'y1'}]},
+options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{position:'left',title:{display:true,text:'Créditos'}},y1:{position:'right',grid:{drawOnChartArea:false},title:{display:true,text:'S/ MM'}}}}});
+new Chart(c_canal,{type:'doughnut',data:{labels:D.canal_final.lab,datasets:[{data:D.canal_final.val,backgroundColor:PALETA,borderWidth:2,borderColor:'#fff'}]},options:{maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10}}}}}});
+new Chart(c_ant,{type:'bar',data:{labels:Object.keys(D.ant_canal),datasets:[{data:Object.values(D.ant_canal),backgroundColor:VCORP,borderRadius:4}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:noLeg,scales:{x:{title:{display:true,text:'meses'}}}}});
+new Chart(c_camp,{type:'bar',data:{labels:D.campana_base.lab,datasets:[{data:D.campana_base.val,backgroundColor:AZUL,borderRadius:4}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:noLeg}});
+new Chart(c_canalsaldo,{type:'bar',data:{labels:Object.keys(D.canal_final_saldo),datasets:[{data:Object.values(D.canal_final_saldo),backgroundColor:VC,borderRadius:4}]},options:{maintainAspectRatio:false,plugins:noLeg,scales:{y:{title:{display:true,text:'S/ MM'}}}}});
+new Chart(c_cob,{data:{labels:D.meses,datasets:[
+{type:'line',label:'% en funnel',data:D.en_funnel_pct,borderColor:AZUL,backgroundColor:AZUL,tension:.35,borderWidth:3,pointRadius:2},
+{type:'line',label:'% gestionado (de funnel)',data:D.gest_pct,borderColor:'#c41e3a',backgroundColor:'#c41e3a',tension:.35,borderWidth:3,pointRadius:2,borderDash:[5,4]}]},
+options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{min:0,max:100,title:{display:true,text:'%'}}}}});
+new Chart(c_emb,{type:'bar',data:{labels:['Fugados','En funnel','Carterizados','Gestionados'],datasets:[{data:[D.embudo.fugados,D.embudo.en_funnel,D.embudo.carterizados,D.embudo.gestionados],backgroundColor:[GRIS,AZUL,VCORP,VC],borderRadius:5}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:noLeg}});
+new Chart(c_prio,{type:'doughnut',data:{labels:D.prioridad.lab,datasets:[{data:D.prioridad.val,backgroundColor:PALETA,borderWidth:2,borderColor:'#fff'}]},options:{maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8}}}}});
+new Chart(c_cfn,{type:'doughnut',data:{labels:D.canal_funnel.lab,datasets:[{data:D.canal_funnel.val,backgroundColor:[AZUL,VC,VCORP],borderWidth:2,borderColor:'#fff'}]},options:{maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8}}}}});
+new Chart(c_camf,{type:'bar',data:{labels:D.campanha_funnel.lab,datasets:[{data:D.campanha_funnel.val,backgroundColor:VCORP,borderRadius:4}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:noLeg}});
+new Chart(c_sup,{type:'bar',data:{labels:D.supervisores.lab,datasets:[{data:D.supervisores.val,backgroundColor:AZUL,borderRadius:4}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:noLeg}});
+
+function comboRange(id,obj,barColor){
+ new Chart(document.getElementById(id),{data:{labels:obj.lab,datasets:[
+ {type:'bar',label:'Créditos',data:obj.n,backgroundColor:barColor,borderRadius:4,yAxisID:'y',order:2},
+ {type:'line',label:'Saldo fugado (S/ MM)',data:obj.saldo,borderColor:'#c41e3a',backgroundColor:'#c41e3a',tension:.35,borderWidth:3,pointRadius:3,yAxisID:'y1',order:1}]},
+ options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10}}}},
+ scales:{y:{position:'left',title:{display:true,text:'Créditos'}},y1:{position:'right',grid:{drawOnChartArea:false},title:{display:true,text:'S/ MM'}}}}});
+}
+comboRange('c_rmonto',D.r_monto,AZUL);
+comboRange('c_rsaldo',D.r_saldo,VCORP);
+comboRange('c_rtasa',D.r_tasa,VC);
+
+function stacked(id,obj,colors,unit){
+ const ds=Object.keys(obj).map((k,i)=>({label:k,data:obj[k],backgroundColor:colors[i%colors.length],borderWidth:0,borderRadius:2}));
+ new Chart(document.getElementById(id),{type:'bar',data:{labels:D.meses,datasets:ds},
+ options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:7,font:{size:9.5}}},
+ tooltip:{callbacks:{label:c=>c.dataset.label+': '+(unit==='S/'?'S/ '+c.parsed.y+' MM':c.parsed.y)}}},
+ scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:unit==='S/'?'S/ MM':'Créditos'}}}}});
+}
+const C_CANAL=[AZUL,VC,VCORP,'#5b8def','#a0aec0'];
+const C_RANGO=['#9aa3b2','#5b8def',AZUL,VCORP,VC,'#7ed957'];
+const C_PRIO=[AZUL,VC,VCORP,'#5b8def','#a0aec0'];
+const C_GEST=[VC,'#c41e3a','#9aa3b2'];
+stacked('s_canal',D.stk_canal,C_CANAL,'n');
+stacked('s_saldo',D.stk_saldo_canal,C_CANAL,'S/');
+stacked('s_montocanal',D.stk_monto_canal,C_CANAL,'S/');
+stacked('s_monto',D.stk_monto,C_RANGO,'n');
+stacked('s_tasa',D.stk_tasa,C_RANGO,'n');
+stacked('s_gest',D.stk_gest,C_GEST,'n');
+stacked('s_prio',D.stk_prio,C_PRIO,'n');
+
+stacked('s_saldoidc',D.stk_saldo_idcanal,[AZUL,VC,VCORP,'#9aa3b2'],'S/');
+stacked('s_saldocart',D.stk_saldo_cartera,[AZUL,'#c4314b'],'S/');
+</script></body></html>
