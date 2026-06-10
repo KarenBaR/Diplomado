@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Asistente CEM — Interbank NBC Empresas</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', -apple-system, sans-serif; background: linear-gradient(135deg, #f4f6f9 0%, #e8eef6 100%); margin: 0; padding: 0; color: #222; }
+
+    .container {
+      max-width: 600px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column;
+      background: #fff; box-shadow: 0 0 30px rgba(0,0,0,.1);
+    }
+
+    header {
+      background: linear-gradient(135deg, #003366 0%, #0055a5 100%);
+      color: #fff; padding: 20px 24px; display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+    header .status {
+      font-size: .75rem; opacity: .8; margin-left: auto; padding: 4px 10px;
+      background: rgba(255,255,255,.2); border-radius: 12px;
+    }
+
+    .chat-box {
+      flex: 1; overflow-y: auto; padding: 20px 20px; display: flex;
+      flex-direction: column; gap: 14px;
+    }
+
+    .message {
+      display: flex; gap: 10px; animation: slideIn .3s ease-out;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .message.bot { justify-content: flex-start; }
+    .message.user { justify-content: flex-end; }
+
+    .bubble {
+      max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: .9rem;
+      line-height: 1.4; word-wrap: break-word;
+    }
+
+    .message.bot .bubble {
+      background: #e8eef6; color: #003366; border-bottom-left-radius: 4px;
+    }
+
+    .message.user .bubble {
+      background: #0055a5; color: #fff; border-bottom-right-radius: 4px;
+    }
+
+    .chips-container {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+    }
+
+    .chip {
+      padding: 8px 14px; background: #cddcf0; color: #003366; border: none;
+      border-radius: 20px; font-size: .85rem; font-weight: 500; cursor: pointer;
+      transition: all .2s; border: 2px solid transparent;
+    }
+    .chip:hover { background: #b0c4e0; transform: translateY(-2px); }
+    .chip:active { transform: scale(.96); }
+
+    .input-area {
+      padding: 16px 20px; border-top: 1px solid #e0e7ef; display: flex; gap: 10px;
+      background: #f9fbff;
+    }
+
+    input[type=text], input[type=number] {
+      flex: 1; padding: 10px 14px; border: 2px solid #ccd4df; border-radius: 24px;
+      font-size: .9rem; outline: none; transition: border .2s;
+    }
+    input:focus { border-color: #0055a5; }
+
+    button {
+      padding: 10px 20px; background: #0055a5; color: #fff; border: none;
+      border-radius: 24px; font-size: .9rem; font-weight: 600; cursor: pointer;
+      transition: background .2s, transform .1s;
+    }
+    button:hover { background: #003e80; }
+    button:active { transform: scale(.96); }
+
+    .typing {
+      display: flex; gap: 4px; align-items: center; padding: 12px 16px;
+      background: #e8eef6; border-radius: 18px; width: fit-content; border-bottom-left-radius: 4px;
+    }
+    .typing span {
+      width: 8px; height: 8px; background: #0055a5; border-radius: 50%;
+      animation: bounce .6s infinite;
+    }
+    .typing span:nth-child(1) { animation-delay: 0s; }
+    .typing span:nth-child(2) { animation-delay: .2s; }
+    .typing span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+    .result-box {
+      background: #f0f5fc; border-left: 4px solid #0055a5; border-radius: 8px;
+      padding: 12px 14px; font-size: .82rem; margin-top: 6px;
+      max-height: 200px; overflow-y: auto;
+    }
+
+    .badge {
+      display: inline-block; border-radius: 6px; padding: 3px 10px;
+      font-size: .78rem; font-weight: 700; margin-left: 4px; background: #d4edda; color: #155724;
+    }
+
+    .error { color: #dc3545; }
+    .success { color: #28a745; }
+
+    .cem-resultado {
+      background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+      border-radius: 12px; padding: 16px; margin-top: 10px;
+      border-left: 4px solid #28a745;
+    }
+    .cem-resultado h3 { margin: 0 0 10px; color: #155724; }
+    .cem-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .cem-item {
+      background: rgba(255,255,255,.6); border-radius: 8px; padding: 10px; text-align: center;
+    }
+    .cem-item .val { font-size: 1.1rem; font-weight: 700; color: #003366; }
+    .cem-item .lbl { font-size: .75rem; color: #555; margin-top: 4px; }
+
+    @media (max-width: 640px) {
+      .container { height: auto; min-height: 100vh; }
+      header h1 { font-size: .95rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>🏦 Asistente CEM</h1>
+    <div class="status" id="api-status" onclick="cambiarURL()" style="cursor:pointer" title="Clic para cambiar URL">verificando...</div>
+  </header>
+
+  <div class="chat-box" id="chat-box"></div>
+
+  <div class="input-area">
+    <input type="text" id="user-input" placeholder="Escribe aquí..." onkeypress="if(event.key==='Enter') enviarRespuesta()"/>
+    <button onclick="enviarRespuesta()">Enviar</button>
+  </div>
+</div>
+
+<script>
+  const API = localStorage.getItem("cem_api_url") || "";
+  let estado = { paso: "inicio", periodo_activo: null, periodos: [], ruc_actual: null };
+
+  const chat = document.getElementById("chat-box");
+  const input = document.getElementById("user-input");
+  const statusEl = document.getElementById("api-status");
+
+  function addBotMessage(text, chips = [], isTyping = false) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "message bot";
+    if (isTyping) {
+      msgDiv.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+    } else {
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.innerHTML = text.replace(/\n/g, "<br>");
+      msgDiv.appendChild(bubble);
+      if (chips.length > 0) {
+        const chipsDiv = document.createElement("div");
+        chipsDiv.className = "chips-container";
+        chips.forEach(({ label, value }) => {
+          const chip = document.createElement("button");
+          chip.className = "chip";
+          chip.textContent = label;
+          chip.onclick = () => { 
+            input.value = value; 
+            enviarRespuesta();
+          };
+          chipsDiv.appendChild(chip);
+        });
+        msgDiv.appendChild(chipsDiv);
+      }
+    }
+    chat.appendChild(msgDiv);
+    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
+    return msgDiv;
+  }
+
+  function addUserMessage(text) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "message user";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+    msgDiv.appendChild(bubble);
+    chat.appendChild(msgDiv);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function showTyping() {
+    return addBotMessage("", [], true);
+  }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(API + "/api/v1/health");
+      const d = await r.json();
+      statusEl.textContent = "✅ API activa";
+      return true;
+    } catch (e) {
+      statusEl.textContent = "❌ Sin conexión";
+      return false;
+    }
+  }
+
+  async function iniciar() {
+    if (!API) {
+      const url = prompt("Ingresa la URL de la API (cloudflare):", "");
+      if (!url) return;
+      localStorage.setItem("cem_api_url", url.trim().replace(/\/$/, ""));
+      location.reload(); return;
+    }
+    const ok = await checkHealth();
+    if (!ok) {
+      addBotMessage("⚠️ No puedo conectar con la API. Verifica la conexión e intenta de nuevo.");
+      return;
+    }
+    try {
+      const r = await fetch(API + "/api/v1/config/periodo");
+      const d = await r.json();
+      estado.periodos = d.periodos_disponibles || [];
+      estado.periodo_activo = d.periodo_activo;
+      mostrarMenuPrincipal();
+    } catch (e) {
+      addBotMessage("Error al cargar periodos. Intenta de nuevo.");
+    }
+  }
+
+  function mostrarMenuPrincipal() {
+    addBotMessage(
+      "¡Hola! 👋 Soy el Agente IA de Banca Negocio.\n¿Qué deseas hacer?",
+      [
+        { label: "📋 Calcular CEM", value: "__cem__" },
+        { label: "👤 Perfil del cliente", value: "__perfil__" },
+        { label: "👥 Ver vinculados", value: "__vinculados__" }
+      ]
+    );
+    estado.paso = "menu_principal";
+  }
+
+  async function enviarRespuesta() {
+    const texto = input.value.trim();
+    if (!texto) return;
+    addUserMessage(texto);
+    input.value = "";
+    const typing = showTyping();
+
+    if (estado.paso === "menu_principal") {
+      typing.remove();
+      if (texto === "__cem__") {
+        estado.modo = "cem";
+        addBotMessage("¿Qué periodo deseas consultar?",
+          estado.periodos.map(p => ({ label: p, value: p })));
+        estado.paso = "seleccionar_periodo";
+      } else if (texto === "__perfil__") {
+        estado.modo = "perfil";
+        addBotMessage("¿Qué periodo deseas consultar?",
+          estado.periodos.map(p => ({ label: p, value: p })));
+        estado.paso = "seleccionar_periodo";
+      } else if (texto === "__vinculados__") {
+        estado.modo = "vinculados";
+        addBotMessage("Ingresa el RUC del cliente para ver sus vinculados:");
+        estado.paso = "solicitar_ruc_vinculados";
+      }
+    } else if (estado.paso === "seleccionar_periodo") {
+      await procesarPeriodo(texto, typing);
+    } else if (estado.paso === "solicitar_ruc") {
+      await procesarRuc(texto, typing);
+    } else if (estado.paso === "solicitar_ruc_vinculados") {
+      await procesarRucVinculados(texto, typing);
+    } else if (estado.paso === "solicitar_datos") {
+      await procesarDatos(texto, typing);
+    } else if (estado.paso === "menu_final") {
+      typing.remove();
+      if (texto === "otro ruc") {
+        datos_calculo = {};
+        addBotMessage("Ingresa el RUC del cliente:");
+        estado.paso = "solicitar_ruc";
+      } else if (texto === "otro periodo") {
+        datos_calculo = {};
+        addBotMessage("¿Qué periodo deseas consultar?",
+          estado.periodos.map(p => ({ label: p, value: p })));
+        estado.paso = "seleccionar_periodo";
+      } else if (texto === "menu") {
+        datos_calculo = {};
+        mostrarMenuPrincipal();
+      }
+    }
+  }
+
+  async function procesarPeriodo(periodo, typing) {
+    if (!estado.periodos.includes(periodo)) {
+      typing.remove();
+      addBotMessage("No reconozco ese periodo. Elige uno de los disponibles:", 
+        estado.periodos.map(p => ({ label: p, value: p })));
+      return;
+    }
+
+    try {
+      const r = await fetch(API + "/api/v1/config/periodo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ periodo })
+      });
+      const d = await r.json();
+      typing.remove();
+
+      if (!r.ok) {
+        addBotMessage("❌ Error al activar el periodo: " + (d.detail || JSON.stringify(d)));
+        return;
+      }
+
+      estado.periodo_activo = periodo;
+      addBotMessage(`✅ Perfecto, periodo ${periodo} activado (${d.registros} registros en la base).\n\nAhora, ¿cuál es el RUC de la empresa que quieres consultar?`);
+      estado.paso = "solicitar_ruc";
+    } catch (e) {
+      typing.remove();
+      addBotMessage("❌ Error de conexión: " + e.message);
+    }
+  }
+
+  const fmtK = (n) => {
+    if (!n || n == 0) return "—";
+    n = parseFloat(n);
+    if (n >= 1000000) return "S/ " + (n/1000000).toFixed(1) + "M";
+    if (n >= 1000) return "S/ " + (n/1000).toFixed(0) + "K";
+    return "S/ " + Math.round(n).toLocaleString("es-PE");
+  };
+
+  async function procesarRuc(ruc, typing) {
+    try {
+      ruc = ruc.replace(/\D/g, "");
+      if (ruc.length !== 11) {
+        typing.remove();
+        addBotMessage("El RUC debe tener 11 dígitos. Intenta de nuevo.");
+        return;
+      }
+      const r = await fetch(API + "/api/v1/cem/buscar-ruc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ruc })
+      });
+      const d = await r.json();
+      typing.remove();
+
+      if (!r.ok || !d.encontrado) {
+        addBotMessage("❌ No encontré ese RUC en la base de datos. ¿Quieres intentar con otro?");
+        return;
+      }
+
+      estado.ruc_actual = ruc;
+      const potGrupo = d.potencial?.grupo_tda || d.grupo_propension_tda_f_v2 || "";
+      const potColor = potGrupo==="P1"?"#28a745":potGrupo==="P2"?"#17a2b8":potGrupo==="P3"?"#fd7e14":"#6c757d";
+      const potScore = d.potencial?.score_propension ? parseFloat(d.potencial.score_propension).toFixed(2) : "";
+      const calif = (d.calificacion_cliente||"").toUpperCase();
+      const califColor = calif==="NORMAL"?"#28a745":"#dc3545";
+      const califBg = calif==="NORMAL"?"#d4edda":"#f8d7da";
+
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "message bot";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.innerHTML = `
+        <strong>✅ Cliente encontrado</strong>
+        <div style="background:#e8f0fa;border-radius:10px;padding:12px;margin-top:8px;border-left:4px solid #0055a5;font-size:13px;line-height:1.9">
+          <div style="font-weight:500;font-size:14px;color:#003366;margin-bottom:6px">${d.razon_social || "—"}</div>
+          <div><b>RUC:</b> ${ruc}</div>
+          <div><b>Giro:</b> ${d.giro_canonico || "—"}</div>
+          <div><b>Sector:</b> ${d.subsector || "—"}</div>
+          <div><b>Margen asignado:</b> ${d.margen_asignado ? (d.margen_asignado*100).toFixed(0)+"%" : "—"}</div>
+          <div><b>Deuda máx. 12m:</b> ${fmtK(d.deuda_total_sbs)}</div>
+          ${calif ? `<div><b>Calificación:</b> <span style="background:${califBg};color:${califColor};padding:1px 8px;border-radius:10px;font-size:12px;font-weight:500">${d.calificacion_cliente}</span></div>` : ""}
+          ${d.situacion_cliente ? `<div><b>Situación:</b> ${d.situacion_cliente}</div>` : ""}
+          ${d.saldo_vigente > 0 ? `<div><b>Saldo crédito vigente:</b> ${fmtK(d.saldo_vigente)}</div>` : ""}
+          ${d.cuota_total > 0 ? `<div><b>Cuota total SF:</b> ${fmtK(d.cuota_total)}</div>` : ""}
+          ${d.pago_mensual_financiero > 0 ? `<div><b>Cuota SF:</b> ${fmtK(d.pago_mensual_financiero)}</div>` : ""}
+          ${potGrupo ? `<div><b>Potencial:</b> <span style="background:${potColor};color:#fff;padding:1px 10px;border-radius:10px;font-size:12px;font-weight:500">${potGrupo}</span>${potScore ? " score "+potScore : ""}</div>` : ""}
+          ${d.venta_anual_final > 0 ? `<div><b>Venta anual SUNAT:</b> ${fmtK(d.venta_anual_final)}${d.periodo_eeff ? " <span style=\'color:#888;font-size:11px\'>(EEFF "+d.periodo_eeff+")</span>" : ""}</div>` : ""}
+        </div>`;
+      msgDiv.appendChild(bubble);
+      chat.appendChild(msgDiv);
+      setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
+
+      if (estado.modo === "perfil") {
+        // Solo mostrar perfil — ofrecer siguiente acción
+        const msgDiv2 = document.createElement("div");
+        msgDiv2.className = "message bot";
+        const bub2 = document.createElement("div");
+        bub2.className = "bubble";
+        bub2.innerHTML = "¿Qué deseas hacer con este cliente?";
+        const cd = document.createElement("div");
+        cd.className = "chips-container";
+        [{ label:"📋 Calcular CEM", value:"__ir_cem__" },
+         { label:"👥 Ver vinculados", value:"__ir_vinc__" },
+         { label:"🏠 Menú principal", value:"menu" }].forEach(op => {
+          const btn = document.createElement("button");
+          btn.className = "chip";
+          btn.textContent = op.label;
+          btn.onclick = () => { input.value = op.value; enviarRespuesta(); };
+          cd.appendChild(btn);
+        });
+        bub2.appendChild(cd);
+        msgDiv2.appendChild(bub2);
+        chat.appendChild(msgDiv2);
+        setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
+        estado.paso = "menu_final";
+      } else {
+        // Modo CEM — seguir con datos
+        addBotMessage("Ahora necesito algunos datos para calcular el CEM.");
+        estado.paso = "solicitar_datos";
+        solicitarSiguienteDato();
+      }
+    } catch (e) {
+      typing.remove();
+      addBotMessage("❌ Error al buscar RUC: " + e.message);
+    }
+  }
+
+  async function procesarRucVinculados(ruc, typing) {
+    ruc = ruc.replace(/\D/g, "");
+    if (ruc.length !== 11) {
+      typing.remove();
+      addBotMessage("El RUC debe tener 11 dígitos. Intenta de nuevo.");
+      return;
+    }
+    try {
+      const r = await fetch(API + "/api/v1/cem/vinculados/" + ruc);
+      const d = await r.json();
+      typing.remove();
+      if (!d.encontrado) {
+        addBotMessage("❌ No encontré vinculados para ese RUC.");
+      } else {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "message bot";
+        const bub = document.createElement("div");
+        bub.className = "bubble";
+        const res = d.resumen || {};
+        const semColor = res.semaforo==="verde"?"#28a745":res.semaforo==="amarillo"?"#fd7e14":"#dc3545";
+        bub.innerHTML = `<strong>👥 Vinculados — RUC ${ruc}</strong>
+          <div style="background:#e8f0fa;border-radius:10px;padding:12px;margin-top:8px;border-left:4px solid ${semColor};font-size:13px;line-height:1.9">
+          <div><b>Semáforo:</b> <span style="color:${semColor};font-weight:500">${(res.semaforo||"—").toUpperCase()}</span></div>
+          <div><b>RRLL totales:</b> ${res.total_rrll||0}</div>
+          <div><b>Con mala calificación:</b> ${res.rrll_con_mala_calif||0}</div>
+          <div><b>Deuda total vinculados:</b> ${fmtK(res.deuda_total_vinculados)}</div>
+          <div><b>Cuota total RRLL:</b> ${fmtK(res.cuota_total_rrll)}</div>
+          ${(d.lista_rrll||[]).map(r2 => `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #ccd4df">
+            RRLL ${r2.numero}: ${r2.cargo} · DNI ${r2.dni} · <b>${r2.calificacion_label}</b> · ${fmtK(r2.deuda_total)}
+          </div>`).join("")}
+          </div>`;
+        msgDiv.appendChild(bub);
+        chat.appendChild(msgDiv);
+        setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
+      }
+      addBotMessage("¿Qué deseas hacer ahora?", [
+        { label:"🏠 Menú principal", value:"menu" },
+        { label:"Otro RUC", value:"otro ruc" }
+      ]);
+      estado.paso = "menu_final";
+    } catch(e) {
+      typing.remove();
+      addBotMessage("❌ Error al consultar vinculados: " + e.message);
+    }
+  }
+
+  let datos_calculo = {};
+
+  function solicitarSiguienteDato() {
+    const secuencia = [
+      { key: "oferta_solicitada", label: "¿Cuánto de oferta necesitas? (S/)", placeholder: "50000" },
+      { key: "plazo_meses", label: "¿A cuántos meses? (meses)", placeholder: "24" },
+      { key: "venta_mensual_rp", label: "¿Cuál es tu venta mensual RT? (S/)", placeholder: "15000" },
+      { key: "gastos_admin_mensual", label: "¿Cuáles son tus gastos administrativos al mes? (S/)", placeholder: "2500" }
+    ];
+
+    for (let d of secuencia) {
+      if (!(d.key in datos_calculo)) {
+        estado.dato_esperado = d.key;
+        addBotMessage(d.label);
+        return;
+      }
+    }
+
+    // Todos los datos recolectados
+    calcularCEM();
+  }
+
+  function procesarDatos(valor, typing) {
+    typing.remove();
+    const numVal = parseFloat(valor.replace(/[^\d.]/g, ""));
+    if (isNaN(numVal) || numVal <= 0) {
+      addBotMessage("Por favor, ingresa un número válido.");
+      solicitarSiguienteDato();
+      return;
+    }
+
+    datos_calculo[estado.dato_esperado] = numVal;
+    addBotMessage("✓ Anotado.");
+    solicitarSiguienteDato();
+  }
+
+  async function calcularCEM() {
+    const typing = showTyping();
+    try {
+      const payload = {
+        ruc: estado.ruc_actual,
+        ...datos_calculo,
+        tiene_programa_pagos: false
+      };
+
+      const r = await fetch(API + "/api/v1/cem/calcular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const d = await r.json();
+      typing.remove();
+
+      if (!r.ok) {
+        addBotMessage("❌ Error en el cálculo: " + d.detail);
+        return;
+      }
+
+      const fmt = (n) => parseFloat(n).toLocaleString("es-PE", { minimumFractionDigits: 2 });
+      const colorAlerta = d.alerta.includes("POSITIVO") ? "✅" : 
+                         d.alerta.includes("NEGATIVO") ? "❌" : "⚠️";
+
+      const resultMsg = document.createElement("div");
+      resultMsg.className = "message bot";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.innerHTML = `
+        <strong>✨ Aquí está tu CEM calculado:</strong><br><br>
+        <div class="cem-resultado">
+          <h3>Resultado: ${colorAlerta} ${d.alerta}</h3>
+          <div class="cem-grid">
+            <div class="cem-item">
+              <div class="val">S/ ${fmt(d.cem_mensual)}</div>
+              <div class="lbl">CEM Mensual</div>
+            </div>
+            <div class="cem-item">
+              <div class="val">S/ ${fmt(d.cuota_estimada_mensual)}</div>
+              <div class="lbl">Cuota Estimada</div>
+            </div>
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,.1);">
+            <strong>💡 Recomendación:</strong><br>
+            ${d.recomendacion}
+          </div>
+        </div>
+      `;
+      resultMsg.appendChild(bubble);
+      chat.appendChild(resultMsg);
+      chat.scrollTop = chat.scrollHeight;
+
+      // Opciones post-resultado
+      setTimeout(() => {
+        addBotMessage("¿Qué deseas hacer ahora?", [
+          { label: "Otro RUC", value: "otro ruc" },
+          { label: "🏠 Menú principal", value: "menu" }
+        ]);
+        estado.paso = "menu_final";
+      }, 1000);
+
+    } catch (e) {
+      typing.remove();
+      addBotMessage("❌ Error: " + e.message);
+    }
+  }
+
+  function cambiarURL() {
+    const nueva = prompt("Ingresa la nueva URL de la API:", localStorage.getItem("cem_api_url") || "");
+    if (nueva && nueva.trim()) {
+      localStorage.setItem("cem_api_url", nueva.trim().replace(/\/$/, ""));
+      location.reload();
+    }
+  }
+
+  window.addEventListener("load", iniciar);
+</script>
+</body>
+</html>
