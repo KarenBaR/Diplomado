@@ -101,7 +101,7 @@ input[type=text]:focus{border-color:#00BE50;background:#fff;}
 </div>
 
 <script>
-let API = localStorage.getItem("cem_api_url") || "https://atlanta-absent-snap-stood.trycloudflare.com";
+let API = localStorage.getItem("cem_api_url") || "https://excuse-butter-list-leslie.trycloudflare.com";
 let estado = { paso:"menu_principal", modo:"", periodo_activo:null, periodos:[], ruc_actual:null, ruc_data:null };
 let datos_calculo = {};
 let pyg_vals = {};
@@ -335,7 +335,11 @@ async function buscarRuc(ruc, t) {
     estado.ruc_data = d;
     // Cuota SF de referencia = cuota_sf_total de la BD
     // cuota_sf = cuota_total_rrll + cuota_total_empresa
-    estado.cuota_sf_ref = (d.cuota_total_rrll||0) + (d.cuota_total_empresa||0);
+    // cuota_sf_1 = rrll + empresa
+    estado.cuota_sf_ref  = d.cuota_sf_bd  || ((d.cuota_total_rrll||0) + (d.cuota_total_empresa||0));
+    // cuota_sf_2 = rrll + empresa + conyugue
+    estado.cuota_sf2_ref = d.cuota_sf_2_bd || estado.cuota_sf_ref;
+    estado.cuota_conyugue = d.cuota_total_conyugue || 0;
     mostrarTarjetaCliente(d, ruc);
   } catch(e){ t.remove(); botMsg("❌ Error: "+e.message); }
 }
@@ -366,11 +370,11 @@ function mostrarTarjetaCliente(d, ruc) {
         <div class="card-field"><span class="card-label">Deuda máx. 12m</span><span class="card-value">${fmtK(d.deuda_total_sbs)}</span></div>
         <div class="card-div"></div>
         ${calif?`<div class="card-field"><span class="card-label">Calificación</span><span class="card-value"><span class="badge ${califClass}">${d.calificacion_cliente}</span></span></div>`:""}
-        ${d.situacion_cliente?`<div class="card-field"><span class="card-label">Situación</span><span class="card-value"><span class="badge ${sitClass}">${d.situacion_cliente}</span></span></div>`:""}
+
         ${d.saldo_vigente>0?`<div class="card-field"><span class="card-label">Saldo vigente</span><span class="card-value">${fmtK(d.saldo_vigente)}</span></div>`:""}
-        ${(d.cuota_total_rrll>0||d.cuota_total_empresa>0)?`<div class="card-field"><span class="card-label">Cuota SF</span><span class="card-value">${fmtK((d.cuota_total_rrll||0)+(d.cuota_total_empresa||0))}</span></div>`:""}
+
         ${potGrupo?`<div class="card-field"><span class="card-label">Potencial</span><span class="card-value"><span class="badge ${potClass}">${potGrupo}</span>${potScore?" score "+potScore:""}</span></div>`:""}
-        ${d.venta_anual_final>0?`<div class="card-div"></div><div class="card-field" style="grid-column:1/-1"><span class="card-label">Venta anual SUNAT${d.periodo_eeff?" (EEFF "+d.periodo_eeff+")":""}</span><span class="card-value">${fmtK(d.venta_anual_final)}</span></div>`:""}
+        ${d.venta_anual_final>0?`<div class="card-div"></div><div class="card-field" style="grid-column:1/-1"><span class="card-label">Venta anual SUNAT${d.periodo_eeff?" (Última evaluación "+formatEEFF(d.periodo_eeff)+")":""}</span><span class="card-value">${fmtK(d.venta_anual_final)}</span></div>`:""}
       </div>
     </div>`;
 
@@ -519,40 +523,162 @@ function pedirSiguienteDato() {
 }
 
 function confirmarGastoFinanciero() {
-  const ref = estado.cuota_sf_ref;
-  const refExacto = fmtExacto(ref);
-  const empExacto = fmtExacto(estado.ruc_data?.cuota_total_empresa||0);
-  const rrllExacto = fmtExacto(estado.ruc_data?.cuota_total_rrll||0);
-  estado.paso = "confirmar_gf";
+  const rrll    = estado.ruc_data?.cuota_total_rrll    || 0;
+  const empresa = estado.ruc_data?.cuota_total_empresa || 0;
+  const cony    = estado.cuota_conyugue                || 0;
+  const hasCony = cony > 0;
+  estado.paso   = "confirmar_gf";
 
+  const pid = "gfp_" + Date.now();
+
+  // Crear estructura con DOM — sin concatenaciones problemáticas
   const div = document.createElement("div");
   div.className = "message bot";
   div.innerHTML = '<div class="avatar">IA</div>';
   const bub = document.createElement("div");
   bub.className = "bubble";
-  bub.innerHTML = `<b>💡 Gasto financiero de referencia</b>
-    <div style="background:#e6faf0;border-radius:10px;padding:10px 12px;margin:6px 0;font-size:.82rem;border-left:4px solid #00BE50">
-      La <b>cuota SF total</b> en el sistema es <b style="color:#005F1E;font-size:1rem">S/ ${refExacto}</b><br>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:.77rem;">
-        <div><span style="color:#888">Cuota empresa</span><br><b>S/ ${empExacto}</b></div>
-        <div><span style="color:#888">Cuota RRLL</span><br><b>S/ ${rrllExacto}</b></div>
-      </div>
-    </div>
-    <span style="font-size:.8rem;color:#555">Este es un <b>estimado</b>. ¿Usas ese monto o tienes el gasto financiero real?</span>
-    <div class="chips">
-      <button class="chip" onclick="usarGFRef()">✅ Usar S/ ${refExacto}</button>
-      <button class="chip" onclick="ingresarGFManual()">✏ Ingresar el real</button>
-    </div>`;
+
+  // Título
+  const titulo = document.createElement("b");
+  titulo.textContent = "Selecciona los componentes del gasto financiero";
+  bub.appendChild(titulo);
+
+  const subtit = document.createElement("div");
+  subtit.style.cssText = "font-size:.78rem;color:#888;margin:4px 0 10px";
+  subtit.textContent = "Marca los que aplican — el total se usará para el CEM";
+  bub.appendChild(subtit);
+
+  const panel = document.createElement("div");
+  panel.id = pid;
+  panel.style.cssText = "display:flex;flex-direction:column;gap:6px";
+
+  // Helper para crear una fila de checkbox
+  function makeChkRow(id, nombre, desc, valor, checked, disabled) {
+    const lbl = document.createElement("label");
+    lbl.style.cssText = "display:flex;align-items:center;gap:10px;background:" +
+      (disabled && !hasCony ? "#fafafa" : "#f7f9fd") +
+      ";border-radius:8px;padding:9px 12px;cursor:" +
+      (disabled ? "default" : "pointer") +
+      ";border:1.5px solid " +
+      (disabled && !hasCony ? "#eeeeee" : "#e0e7f0");
+    lbl.id = "lbl_" + id + "_" + pid;
+
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.id   = "chk_" + id + "_" + pid;
+    chk.style.cssText = "width:16px;height:16px;cursor:" + (disabled ? "not-allowed" : "pointer");
+    if (checked)  chk.checked  = true;
+    if (disabled) chk.disabled = true;
+    chk.addEventListener("change", function() { recalcGFDom(pid, rrll, empresa, cony); });
+    lbl.appendChild(chk);
+
+    const info = document.createElement("div");
+    info.style.flex = "1";
+    const nm = document.createElement("div");
+    nm.style.cssText = "font-size:.83rem;font-weight:500;color:" + (disabled && !hasCony ? "#bbb" : "#1a1a2e");
+    nm.textContent = nombre;
+    const dc = document.createElement("div");
+    dc.style.cssText = "font-size:.75rem;color:#888";
+    dc.textContent = desc;
+    info.appendChild(nm);
+    info.appendChild(dc);
+    lbl.appendChild(info);
+
+    const val = document.createElement("div");
+    val.style.cssText = "font-size:.9rem;font-weight:600;color:" +
+      (disabled && !hasCony ? "#ccc" : (id === "cony" ? "#1F4592" : "#005F1E"));
+    val.textContent = "S/ " + fmtExacto(valor);
+    lbl.appendChild(val);
+
+    return lbl;
+  }
+
+  panel.appendChild(makeChkRow("rrll",    "Cuota RRLL",    "Cuotas de representantes legales",              rrll,    rrll    > 0,  false));
+  panel.appendChild(makeChkRow("empresa", "Cuota empresa", "Cuota del crédito empresarial",                 empresa, empresa > 0,  false));
+  panel.appendChild(makeChkRow("cony",    "Cuota cónyuge", hasCony ? "Cuota del cónyuge del representante" : "Sin cónyuge registrado", cony, false, !hasCony));
+
+  // Total + botón confirmar
+  const totalRow = document.createElement("div");
+  totalRow.style.cssText = "background:#e6faf0;border-radius:8px;padding:10px 12px;margin-top:2px;display:flex;align-items:center;justify-content:space-between";
+
+  const totalInfo = document.createElement("div");
+  const totalLbl  = document.createElement("div");
+  totalLbl.style.cssText = "font-size:.72rem;color:#888;margin-bottom:2px";
+  totalLbl.textContent = "Total GF seleccionado";
+  const totalVal = document.createElement("div");
+  totalVal.id = "total_" + pid;
+  totalVal.style.cssText = "font-size:1.1rem;font-weight:700;color:#005F1E";
+  totalVal.textContent = "S/ " + fmtExacto(rrll + empresa);
+  totalInfo.appendChild(totalLbl);
+  totalInfo.appendChild(totalVal);
+  totalRow.appendChild(totalInfo);
+
+  const btnUsar = document.createElement("button");
+  btnUsar.className = "chip";
+  btnUsar.textContent = "✅ Usar este total";
+  btnUsar.addEventListener("click", function() { confirmarGFSeleccionDom(pid, rrll, empresa, cony); });
+  totalRow.appendChild(btnUsar);
+  panel.appendChild(totalRow);
+
+  // Botón manual
+  const btnManual = document.createElement("button");
+  btnManual.className = "chip";
+  btnManual.style.cssText = "background:transparent;border:1.5px solid #d0daea;color:#555";
+  btnManual.textContent = "✏ Ingresar el gasto financiero real";
+  btnManual.addEventListener("click", ingresarGFManual);
+  panel.appendChild(btnManual);
+
+  bub.appendChild(panel);
+
+  const hint = document.createElement("div");
+  hint.style.cssText = "font-size:.72rem;color:#aaa;margin-top:6px";
+  hint.textContent = "Estimados de la BD · el ejecutivo puede ingresar el valor real";
+  bub.appendChild(hint);
+
   div.appendChild(bub);
   chat.appendChild(div);
-  setTimeout(()=>{ chat.scrollTop = chat.scrollHeight; }, 50);
+  setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
 }
 
-window.usarGFRef = function() {
-  userMsg("Usar cuota SF: "+fmtK(estado.cuota_sf_ref));
-  datos_calculo["gasto_financiero_mensual"] = estado.cuota_sf_ref;
+
+function recalcGFDom(pid, rrll, empresa, cony) {
+  const chkR = document.getElementById("chk_rrll_"+pid)?.checked    ? rrll    : 0;
+  const chkE = document.getElementById("chk_empresa_"+pid)?.checked ? empresa : 0;
+  const chkC = document.getElementById("chk_cony_"+pid)?.checked    ? cony    : 0;
+  const total = chkR + chkE + chkC;
+  const el = document.getElementById("total_"+pid);
+  if(el) el.textContent = "S/ "+fmtExacto(total);
+}
+
+function confirmarGFSeleccionDom(pid, rrll, empresa, cony) {
+  const chkR = document.getElementById("chk_rrll_"+pid)?.checked;
+  const chkE = document.getElementById("chk_empresa_"+pid)?.checked;
+  const chkC = document.getElementById("chk_cony_"+pid)?.checked;
+  const total = (chkR?rrll:0) + (chkE?empresa:0) + (chkC?cony:0);
+  const partes = [];
+  if(chkR) partes.push("rrll");
+  if(chkE) partes.push("empresa");
+  if(chkC) partes.push("conyugue");
+
+  // Deshabilitar panel
+  document.getElementById(pid)?.querySelectorAll("input,button").forEach(el => {
+    el.disabled = true; el.style.pointerEvents = "none";
+  });
+
+  userMsg("GF: S/ "+fmtExacto(total)+" ("+partes.join(" + ")+")");
+  datos_calculo["gasto_financiero_mensual"] = null;
+  datos_calculo["cuotas_incluir"] = partes.join(",");
+  datos_calculo["_gf_display"]   = total;
   pedirSiguienteDato();
-};
+}
+
+window.recalcGF = recalcGFDom;
+
+// confirmarGFSeleccion reemplazado por confirmarGFSeleccionDom
+
+// usarGFOpcion reemplazado por confirmarGFSeleccion
+
+// usarGFRef reemplazado por usarGFOpcion
 
 window.ingresarGFManual = function() {
   userMsg("Ingresar el gasto financiero real");
@@ -564,15 +690,18 @@ window.ingresarGFManual = function() {
 async function calcularCEM() {
   const t = typing();
   try {
+    const gfVal   = datos_calculo.gasto_financiero_mensual;
+    const tieneGF = gfVal !== null && gfVal !== undefined;
     const payload = {
       ruc: estado.ruc_actual,
       oferta_solicitada: datos_calculo.oferta_solicitada,
       plazo_meses: datos_calculo.plazo_meses,
       venta_mensual_rp: datos_calculo.venta_mensual_rp,
       gastos_admin_mensual: datos_calculo.gastos_admin_mensual||0,
-      tiene_programa_pagos: (datos_calculo.gasto_financiero_mensual||0) > 0,
-      gasto_financiero_mensual: datos_calculo.gasto_financiero_mensual||0,
+      tiene_programa_pagos: tieneGF,
+      gasto_financiero_mensual: tieneGF ? gfVal : null,
       gastos_familiares_mensual: datos_calculo.gastos_familiares_mensual||0,
+      cuotas_incluir: datos_calculo.cuotas_incluir || "rrll,empresa",
     };
     const r = await fetch(API+"/api/v1/cem/calcular",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const d = await r.json();
@@ -822,7 +951,7 @@ function mostrarPerfilCompleto(d) {
         <div class="card-field"><span class="card-label">Deuda máx. 12m</span><span class="card-value">${fmtK(d.deuda_total_sbs)}</span></div>
         <div class="card-field"><span class="card-label">Saldo vigente</span><span class="card-value">${d.saldo_vigente>0?fmtK(d.saldo_vigente):"Sin crédito vig."}</span></div>
         ${calif?`<div class="card-field"><span class="card-label">Calificación</span><span class="card-value"><span class="badge ${califClass}">${d.calificacion_cliente}</span></span></div>`:""}
-        ${d.situacion_cliente?`<div class="card-field"><span class="card-label">Situación</span><span class="card-value"><span class="badge ${sitClass}">${d.situacion_cliente}</span></span></div>`:""}
+
 
         <div class="card-div"></div>
 
@@ -885,7 +1014,7 @@ function mostrarPerfilCompleto(d) {
         ${d.venta_anual_final>0?`
         <div class="card-div"></div>
         <div class="card-field" style="grid-column:1/-1">
-          <span class="card-label">Venta anual SUNAT${d.periodo_eeff?" (EEFF "+d.periodo_eeff+")":""}</span>
+          <span class="card-label">Venta anual SUNAT${d.periodo_eeff?" (Última evaluación "+formatEEFF(d.periodo_eeff)+")":""}</span>
           <span class="card-value">${fmtK(d.venta_anual_final)}</span>
         </div>`:""}
       </div>
@@ -1067,6 +1196,18 @@ function renderTop5(d, ruc) {
     recDiv.innerHTML = '<span style="font-size:.7rem;color:#888;font-weight:600;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Recomendación del agente</span>'+recomendacion;
     container.appendChild(recDiv);
   }
+}
+
+function formatEEFF(p) {
+  if(!p) return "";
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const s = String(p).trim();
+  if(s.length === 6) {
+    const yr = s.substring(0,4);
+    const mo = parseInt(s.substring(4,6)) - 1;
+    return meses[mo] + " " + yr;
+  }
+  return p;
 }
 
 window.addEventListener("load", iniciar);
