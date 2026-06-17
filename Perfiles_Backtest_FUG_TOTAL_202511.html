@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=1280, initial-scale=1.0">
+<title>Perfiles y Backtest · Fuga TOTAL · Modelo FUG · 202511</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Poppins', sans-serif; background: #f9fafb; color: #1a2027; padding: 24px 0; }
+.slide { width: 1280px; min-height: 720px; margin: 0 auto 30px; display: flex; flex-direction: column; }
+.header { background: #00be50; color: #fff; padding: 12px 28px; display: flex; align-items: center; border-radius: 14px 14px 0 0; font-weight: 600; font-size: 20px; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); justify-content: space-between; }
+.preview-tag { font-size: 11px; font-weight: 600; background: rgba(255,255,255,0.22); padding: 3px 10px; border-radius: 20px; }
+.main-title { text-align: center; font-size: 19px; color: #1f4592; font-weight: 700; margin: 10px 0; }
+.profiles-container { display: grid; grid-template-columns: repeat(5, 1fr); grid-gap: 12px; padding: 0 20px; flex: 1; }
+.profile-card { background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 16px 13px; display: flex; flex-direction: column; }
+.badge-score { font-size: 13px; font-weight: 700; border-radius: 8px; padding: 4px 12px; text-transform: uppercase; display: inline-block; margin-bottom: 8px; color: #fff; }
+.clientes-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; border-radius: 20px; padding: 3px 8px; margin-bottom: 8px; background: #f1f5f9; color: #334155; }
+.tasa-box { text-align: center; border-radius: 10px; padding: 7px 4px; margin-bottom: 9px; }
+.tasa-val { font-size: 22px; font-weight: 700; line-height: 1; }
+.tasa-lbl { font-size: 9px; font-weight: 600; text-transform: uppercase; color: #4a5568; margin-top: 2px; }
+.metric-grid { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.metric-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #f1f3f5; gap: 6px; }
+.metric-label { font-weight: 500; color: #4a5568; flex: 1; }
+.metric-value { font-weight: 700; text-align: right; white-space: nowrap; color: #1a2027; }
+.score-bar-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px dashed #e2e8f0; }
+.score-bar-label { font-size: 10px; font-weight: 500; color: #4a5568; display: flex; justify-content: space-between; margin-bottom: 5px; }
+.score-bar-container { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 4px; }
+.footer-note { text-align: center; font-size: 11px; color: #4a5568; margin-top: 10px; padding: 0 20px 10px; }
+.footer-note b { color: #1f4592; }
+.kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 6px 24px 0; }
+.kpi { background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,0.08); padding:14px 18px; text-align:center; }
+.kpi-val { font-size:30px; font-weight:700; color:#1f4592; }
+.kpi-val.g { color:#005f1e; }
+.kpi-lbl { font-size:11px; color:#4a5568; font-weight:500; margin-top:3px; }
+.panels { display:grid; grid-template-columns: 1fr 1fr; gap:18px; padding: 14px 24px; flex:1; }
+.panel { background:#fff; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); padding:16px 18px; display:flex; flex-direction:column; }
+.panel h3 { font-size:14px; color:#1f4592; font-weight:700; margin-bottom:4px; }
+.panel .sub { font-size:11px; color:#4a5568; margin-bottom:8px; }
+.panel .sub b { color:#005f1e; }
+.cv { position:relative; flex:1; min-height:250px; }
+.insight { margin: 4px 24px 0; background:#e6f9ee; border-radius:12px; padding:11px 18px; font-size:12px; color:#1a2027; }
+.insight b { color:#005f1e; }
+</style></head>
+<body>
+
+<div class="slide">
+  <div class="header"><span>🛡️ Perfiles por Score · Fuga TOTAL · Modelo FUG Créditos · 202511</span><span class="preview-tag">DATOS REALES</span></div>
+  <div class="main-title">🎯 5 Grupos por Score de Propensión · target = FUGA TOTAL (pierde la relación)</div>
+  <div class="profiles-container">
+      <div class="profile-card" style="border-top:4px solid #00be50;">
+        <span class="badge-score" style="background:#00be50;">Muy Alta</span>
+        <span class="clientes-chip">📊 captura 40.0% de la fuga total</span>
+        <div class="tasa-box" style="background:#e6f9ee;">
+          <div class="tasa-val" style="color:#005f1e;">2.16%</div>
+          <div class="tasa-lbl">Tasa de fuga TOTAL (3m)</div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-row"><span class="metric-label">Meses desde desem. (cap. trab.)</span><span class="metric-value">1.6 m</span></div>
+          <div class="metric-row"><span class="metric-label">Meses con SOW &gt; 50%</span><span class="metric-value">1.0</span></div>
+          <div class="metric-row"><span class="metric-label">Nro. bancos (12m)</span><span class="metric-value">2.0</span></div>
+          <div class="metric-row"><span class="metric-label">Cuotas pend. (cap. trab.)</span><span class="metric-value">16.7</span></div>
+          <div class="metric-row"><span class="metric-label">% avance cuotas</span><span class="metric-value">22%</span></div>
+          <div class="metric-row"><span class="metric-label">Saldo compet. (12m)</span><span class="metric-value">S/ 306 K</span></div>
+        </div>
+        <div class="score-bar-wrap">
+          <div class="score-bar-label"><span>Score medio</span><span style="color:#005f1e;font-weight:700;">0.38</span></div>
+          <div class="score-bar-container"><div class="score-bar-fill" style="width:100%;background:#00be50;"></div></div>
+        </div>
+      </div>
+      <div class="profile-card" style="border-top:4px solid #00963d;">
+        <span class="badge-score" style="background:#00963d;">Alta</span>
+        <span class="clientes-chip">📊 captura 24.8% de la fuga total</span>
+        <div class="tasa-box" style="background:#d4f4e2;">
+          <div class="tasa-val" style="color:#005f1e;">1.34%</div>
+          <div class="tasa-lbl">Tasa de fuga TOTAL (3m)</div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-row"><span class="metric-label">Meses desde desem. (cap. trab.)</span><span class="metric-value">6.6 m</span></div>
+          <div class="metric-row"><span class="metric-label">Meses con SOW &gt; 50%</span><span class="metric-value">2.3</span></div>
+          <div class="metric-row"><span class="metric-label">Nro. bancos (12m)</span><span class="metric-value">2.3</span></div>
+          <div class="metric-row"><span class="metric-label">Cuotas pend. (cap. trab.)</span><span class="metric-value">21.3</span></div>
+          <div class="metric-row"><span class="metric-label">% avance cuotas</span><span class="metric-value">32%</span></div>
+          <div class="metric-row"><span class="metric-label">Saldo compet. (12m)</span><span class="metric-value">S/ 381 K</span></div>
+        </div>
+        <div class="score-bar-wrap">
+          <div class="score-bar-label"><span>Score medio</span><span style="color:#005f1e;font-weight:700;">0.363</span></div>
+          <div class="score-bar-container"><div class="score-bar-fill" style="width:60%;background:#00963d;"></div></div>
+        </div>
+      </div>
+      <div class="profile-card" style="border-top:4px solid #1f4592;">
+        <span class="badge-score" style="background:#1f4592;">Media</span>
+        <span class="clientes-chip">📊 captura 17.1% de la fuga total</span>
+        <div class="tasa-box" style="background:#e8edf8;">
+          <div class="tasa-val" style="color:#1f4592;">0.93%</div>
+          <div class="tasa-lbl">Tasa de fuga TOTAL (3m)</div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-row"><span class="metric-label">Meses desde desem. (cap. trab.)</span><span class="metric-value">8.6 m</span></div>
+          <div class="metric-row"><span class="metric-label">Meses con SOW &gt; 50%</span><span class="metric-value">6.1</span></div>
+          <div class="metric-row"><span class="metric-label">Nro. bancos (12m)</span><span class="metric-value">2.0</span></div>
+          <div class="metric-row"><span class="metric-label">Cuotas pend. (cap. trab.)</span><span class="metric-value">26.7</span></div>
+          <div class="metric-row"><span class="metric-label">% avance cuotas</span><span class="metric-value">39%</span></div>
+          <div class="metric-row"><span class="metric-label">Saldo compet. (12m)</span><span class="metric-value">S/ 168 K</span></div>
+        </div>
+        <div class="score-bar-wrap">
+          <div class="score-bar-label"><span>Score medio</span><span style="color:#1f4592;font-weight:700;">0.353</span></div>
+          <div class="score-bar-container"><div class="score-bar-fill" style="width:36%;background:#1f4592;"></div></div>
+        </div>
+      </div>
+      <div class="profile-card" style="border-top:4px solid #162e62;">
+        <span class="badge-score" style="background:#162e62;">Baja</span>
+        <span class="clientes-chip">📊 captura 11.4% de la fuga total</span>
+        <div class="tasa-box" style="background:#d6ddf0;">
+          <div class="tasa-val" style="color:#162e62;">0.63%</div>
+          <div class="tasa-lbl">Tasa de fuga TOTAL (3m)</div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-row"><span class="metric-label">Meses desde desem. (cap. trab.)</span><span class="metric-value">12.6 m</span></div>
+          <div class="metric-row"><span class="metric-label">Meses con SOW &gt; 50%</span><span class="metric-value">8.8</span></div>
+          <div class="metric-row"><span class="metric-label">Nro. bancos (12m)</span><span class="metric-value">1.7</span></div>
+          <div class="metric-row"><span class="metric-label">Cuotas pend. (cap. trab.)</span><span class="metric-value">24.1</span></div>
+          <div class="metric-row"><span class="metric-label">% avance cuotas</span><span class="metric-value">45%</span></div>
+          <div class="metric-row"><span class="metric-label">Saldo compet. (12m)</span><span class="metric-value">S/ 95 K</span></div>
+        </div>
+        <div class="score-bar-wrap">
+          <div class="score-bar-label"><span>Score medio</span><span style="color:#162e62;font-weight:700;">0.347</span></div>
+          <div class="score-bar-container"><div class="score-bar-fill" style="width:22%;background:#162e62;"></div></div>
+        </div>
+      </div>
+      <div class="profile-card" style="border-top:4px solid #64748b;">
+        <span class="badge-score" style="background:#64748b;">Muy Baja</span>
+        <span class="clientes-chip">📊 captura 6.7% de la fuga total</span>
+        <div class="tasa-box" style="background:#eef0f3;">
+          <div class="tasa-val" style="color:#475569;">0.35%</div>
+          <div class="tasa-lbl">Tasa de fuga TOTAL (3m)</div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-row"><span class="metric-label">Meses desde desem. (cap. trab.)</span><span class="metric-value">14.8 m</span></div>
+          <div class="metric-row"><span class="metric-label">Meses con SOW &gt; 50%</span><span class="metric-value">11.2</span></div>
+          <div class="metric-row"><span class="metric-label">Nro. bancos (12m)</span><span class="metric-value">1.4</span></div>
+          <div class="metric-row"><span class="metric-label">Cuotas pend. (cap. trab.)</span><span class="metric-value">19.3</span></div>
+          <div class="metric-row"><span class="metric-label">% avance cuotas</span><span class="metric-value">46%</span></div>
+          <div class="metric-row"><span class="metric-label">Saldo compet. (12m)</span><span class="metric-value">S/ 24 K</span></div>
+        </div>
+        <div class="score-bar-wrap">
+          <div class="score-bar-label"><span>Score medio</span><span style="color:#475569;font-weight:700;">0.343</span></div>
+          <div class="score-bar-container"><div class="score-bar-fill" style="width:13%;background:#64748b;"></div></div>
+        </div>
+      </div></div>
+  <div class="insight">📌 <b>Perfil del que se va:</b> crédito <b>recién desembolsado</b> (G5: 1.6 m), que casi <b>nunca</b> tuvo a IBK como banco principal (G5: 1 mes con SOW &gt; 50% vs G1: 11 m) y trabaja con ~2 bancos. No es el moroso — es el cliente nuevo y multibanca al que la competencia le compra todo.</div>
+  <div class="footer-note">Modelo FUG · target = <b>FUGA_TOTAL</b> en ventana 3m · noviembre 202511 · 9,707 créditos · 105 fugas totales · entidades = bancos (financieras/cajas no disponibles en esta base)</div>
+</div>
+
+<div class="slide">
+  <div class="header"><span>📈 Backtest fuga TOTAL · mes de fuga, saldo cancelado y monto evitable · 202511</span><span class="preview-tag">DATOS REALES</span></div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val">105</div><div class="kpi-lbl">fugas totales en noviembre</div></div>
+    <div class="kpi"><div class="kpi-val g">S/ 15.4 MM</div><div class="kpi-lbl">monto cancelado total (fuga total)</div></div>
+    <div class="kpi"><div class="kpi-val g">S/ 8.2 MM</div><div class="kpi-lbl">se fuga el 1.er mes (53% del saldo)</div></div>
+  </div>
+  <div class="panels">
+    <div class="panel"><h3>Backtest · tasa de fuga total y monto evitable acumulado</h3><div class="sub">blindar de mayor a menor score: cuánto monto cancelado se evita</div><div class="cv"><canvas id="c_back"></canvas></div></div>
+    <div class="panel"><h3>¿En qué mes se fuga y con cuánto saldo cancelado?</h3><div class="sub"><b>105</b> fugas totales · <b>S/ 15.4 MM</b> · el <b>59% se va en el primer mes</b> tras el corte</div><div class="cv"><canvas id="c_time"></canvas></div></div>
+  </div>
+  <div class="insight">📌 <b>Urgencia + potencial:</b> el <b>53% del saldo</b> (S/ 8.2 MM de S/ 15.4 MM) se fuga ya en el <b>primer mes</b> tras el corte. Blindando <b>G5 + G4</b> evitas <b>S/ 9.9 MM (64%)</b> — pero el contacto debe salir apenas se scorea.</div>
+  <div class="footer-note">Cortes por quintiles del score · monto evitable = saldo cancelado (fuga total) acumulado de mayor a menor score · timing = mes de compra del grupo Muy Alto</div>
+</div>
+
+<script>
+const cols=['#00be50','#00963d','#1f4592','#162e62','#64748b'];
+const grp=['G5 muy alto','G4 alto','G3 medio','G2 bajo','G1 muy bajo'];
+const tasas=[2.16,1.34,0.93,0.63,0.35];
+const montoAcum=[5.91,9.88,12.33,14.98,15.42];
+new Chart(c_back,{data:{labels:grp,datasets:[
+ {type:'bar',label:'Tasa fuga total %',data:tasas,backgroundColor:cols,borderRadius:5,yAxisID:'y',order:2},
+ {type:'line',label:'Monto evitable acum. (S/ MM)',data:montoAcum,borderColor:'#005f1e',backgroundColor:'#005f1e',borderWidth:2.5,pointRadius:3,yAxisID:'y2',order:1,tension:.2}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}},
+ tooltip:{callbacks:{label:function(x){return x.dataset.type==='line'?'Monto evitable acum.: S/ '+x.parsed.y+' MM':'Tasa: '+x.parsed.y+'%';}}}},
+ scales:{y:{position:'left',beginAtZero:true,title:{display:true,text:'tasa %',font:{size:10}},ticks:{font:{size:9},callback:v=>v+'%'}},
+ y2:{position:'right',beginAtZero:true,grid:{display:false},title:{display:true,text:'S/ MM evitable (acum.)',font:{size:10}},ticks:{font:{size:9},callback:v=>'S/'+v}},
+ x:{ticks:{font:{size:9}}}}}});
+new Chart(c_time,{data:{labels:['202512 (1.er mes)','202601 (2.º)','202602 (3.º)'],datasets:[
+ {type:'bar',label:'Saldo cancelado (S/ MM)',data:[8.15,4.38,2.87],backgroundColor:['#00be50','#7fd9a5','#bdeccf'],borderRadius:5,yAxisID:'y',order:2},
+ {type:'line',label:'Nro. de fugas',data:[62,26,17],borderColor:'#1f4592',backgroundColor:'#1f4592',borderWidth:2.5,pointRadius:4,yAxisID:'y2',order:1,tension:.2}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}},
+ tooltip:{callbacks:{label:function(x){return x.dataset.type==='line'?x.parsed.y+' fugas':'S/ '+x.parsed.y+' MM';}}}},
+ scales:{y:{position:'left',beginAtZero:true,title:{display:true,text:'S/ MM cancelado',font:{size:10}},ticks:{font:{size:9},callback:v=>'S/'+v}},
+ y2:{position:'right',beginAtZero:true,grid:{display:false},title:{display:true,text:'nro. fugas',font:{size:10}},ticks:{font:{size:9}}},
+ x:{ticks:{font:{size:9}}}}}});
+</script>
+</body></html>
