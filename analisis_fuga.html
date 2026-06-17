@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis de Fuga — NBC Empresas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --blue:#1F4592; --green:#00BE50; --dark:#1B5E37;
+    --ink:#13233f; --muted:#6a7689; --line:#e7ebf2; --bg:#f5f7fa; --card:#ffffff;
+    --red:#c0392b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:48px 32px 80px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--green);font-weight:600;margin-bottom:10px}
+  h1{font-size:34px;font-weight:600;line-height:1.18;color:var(--blue);max-width:880px}
+  h1 b{color:var(--green);font-weight:700}
+  .sub{color:var(--muted);font-size:15px;margin-top:14px;max-width:760px}
+  .meta{margin-top:18px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+
+  section{margin-top:54px}
+  .stitle{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h2{font-size:23px;font-weight:600;color:var(--ink);margin-top:6px;max-width:840px}
+  h2 .hl{color:var(--blue);font-weight:700}
+  h2 .hlg{color:var(--green);font-weight:700}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:26px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .kpi .v{font-size:30px;font-weight:700;color:var(--blue)}
+  .kpi .v.g{color:var(--green)}
+  .kpi .l{font-size:12.5px;color:var(--muted);margin-top:4px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px;margin-top:22px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .grid2.wide{grid-template-columns:1.3fr 1fr}
+  .chart-h{position:relative;height:300px}
+  .chart-h.sm{height:260px}
+  .ctitle{font-size:14px;font-weight:600;margin-bottom:4px}
+  .cnote{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:10px 12px;border-bottom:2px solid var(--line)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+  tr:last-child td{border-bottom:none}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
+
+  .hero-stat{display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:center}
+  .hero-num{font-size:64px;font-weight:700;color:var(--blue);line-height:1}
+  .hero-num small{display:block;font-size:14px;color:var(--muted);font-weight:500;margin-top:8px}
+  .hero-txt{font-size:16px;color:var(--ink)}
+  .hero-txt b{color:var(--green)}
+
+  .insight{background:#eef7f1;border-left:4px solid var(--green);border-radius:0 10px 10px 0;padding:16px 20px;margin-top:16px;font-size:14px;color:var(--ink)}
+  .insight b{color:var(--dark)}
+  .insight.blue{background:#eef1f9;border-color:var(--blue)}
+  .insight.blue b{color:var(--blue)}
+
+  .legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;color:var(--muted)}
+  .footer{margin-top:70px;border-top:1px solid var(--line);padding-top:18px;font-size:11.5px;color:var(--muted)}
+  @media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid2.wide{grid-template-columns:1fr}.hero-stat{grid-template-columns:1fr}.hero-num{font-size:48px}h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Banca Negocio · Análisis de Fuga de Cartera</div>
+    <h1>El cliente no se va por precio: se va de un banco donde <b>ya éramos su principal</b></h1>
+    <p class="sub">Diagnóstico de los créditos comprados por la competencia (Feb-25 a Feb-26). La fuga no es un problema de captación ni de origen: la mayoría llegó a cartera, teníamos la mayor parte de su deuda, y aun así se fueron — concentrados en pocos supervisores y, sobre todo, en el BCP.</p>
+    <div class="meta">Interbank · NBC Empresas — Advanced Analytics &amp; IA · Documento de trabajo interno · 1,366 créditos analizados</div>
+  </header>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi"><div class="v">1,366</div><div class="l">créditos fugados</div></div>
+    <div class="kpi"><div class="v g">S/ 117.2 MM</div><div class="l">saldo cancelado</div></div>
+    <div class="kpi"><div class="v">S/ 162.9 MM</div><div class="l">monto desembolsado original</div></div>
+    <div class="kpi"><div class="v">77%</div><div class="l">SOW promedio (éramos su banco principal)</div></div>
+  </div>
+
+  <!-- TICKET POR CANAL (lo solicitado) -->
+  <section>
+    <div class="stitle">Análisis 1 · Ticket promedio por canal del funnel</div>
+    <h2><span class="hl">Tiendas</span> carga el grueso del saldo y el ticket más alto: S/ 103k por crédito</h2>
+    <div class="card">
+      <div class="grid2 wide">
+        <div>
+          <div class="ctitle">Ticket promedio por canal — saldo cancelado vs. monto desembolsado (miles S/)</div>
+          <div class="cnote">Ticket = total del canal ÷ nº de créditos fugados. ID_CANAL_FUNNEL: 1 = Tiendas · 2 = Tiendas Virtuales · 3 o nulo = TLV / Sin campaña.</div>
+          <div class="chart-h"><canvas id="ticketChart"></canvas></div>
+        </div>
+        <div>
+          <table>
+            <thead><tr><th>Canal funnel</th><th style="text-align:right">Créditos</th><th style="text-align:right">Saldo</th><th style="text-align:right">Ticket saldo</th></tr></thead>
+            <tbody>
+              <tr><td><span class="dot" style="background:#1F4592"></span>Tiendas</td><td class="num">627</td><td class="num">S/ 64.6 MM</td><td class="num">S/ 103k</td></tr>
+              <tr><td><span class="dot" style="background:#00BE50"></span>Tiendas Virtuales</td><td class="num">314</td><td class="num">S/ 22.5 MM</td><td class="num">S/ 72k</td></tr>
+              <tr><td><span class="dot" style="background:#1B5E37"></span>TLV / Sin campaña</td><td class="num">425</td><td class="num">S/ 30.1 MM</td><td class="num">S/ 71k</td></tr>
+            </tbody>
+          </table>
+          <div class="insight"><b>Tiendas concentra el 55% del saldo fugado</b> (S/ 64.6 MM de 117.2) con el ticket más alto. Es el canal donde más duele cada fuga y donde más rinde retener.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BANCO PRINCIPAL / SOW -->
+  <section>
+    <div class="stitle">Análisis 2 · Share of Wallet al momento de la fuga</div>
+    <h2>Sí éramos su banco principal: <span class="hlg">43% se fue con SOW ≥ 90%</span></h2>
+    <div class="card">
+      <div class="hero-stat">
+        <div class="hero-num">77%<small>SOW promedio de los fugados</small></div>
+        <div class="hero-txt">
+          No es fuga de clientes marginales. En promedio Interbank tenía el <b>77% de la deuda</b> de estos clientes, y <b>43% tenía SOW ≥ 90%</b> — prácticamente su único banco. Aun así se fueron, llevándose <b>S/ 45.4 MM</b> de saldo de clientes donde éramos dominantes.
+          <div class="insight blue" style="margin-top:18px">El argumento de "captarlos de nuevo" no aplica: ya los teníamos casi completos. El problema es de <b>retención</b>, no de adquisición.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BANCO DESTINO -->
+  <section>
+    <div class="stitle">Análisis 3 · ¿A dónde se fueron?</div>
+    <h2><span class="hl">El BCP captura la mitad</span>: 276 créditos y S/ 27 MM</h2>
+    <div class="card">
+      <div class="grid2 wide">
+        <div><div class="chart-h"><canvas id="destChart"></canvas></div></div>
+        <div>
+          <table>
+            <thead><tr><th>Banco destino</th><th style="text-align:right">Créditos</th><th style="text-align:right">Saldo</th></tr></thead>
+            <tbody>
+              <tr><td>Banco de Crédito del Perú</td><td class="num">276</td><td class="num">S/ 27.2 MM</td></tr>
+              <tr><td>BBVA Perú</td><td class="num">129</td><td class="num">S/ 12.6 MM</td></tr>
+              <tr><td>Scotiabank Perú</td><td class="num">86</td><td class="num">S/ 6.9 MM</td></tr>
+              <tr><td>Mibanco</td><td class="num">22</td><td class="num">S/ 1.3 MM</td></tr>
+              <tr><td>Caja Piura</td><td class="num">17</td><td class="num">S/ 0.8 MM</td></tr>
+              <tr><td>Caja Arequipa</td><td class="num">12</td><td class="num">S/ 0.5 MM</td></tr>
+            </tbody>
+          </table>
+          <div class="insight">Tres bancos grandes (BCP, BBVA, Scotiabank) explican el grueso de la compra de deuda. La competencia directa por el mismo cliente, no las cajas, es la amenaza.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUPERVISORES -->
+  <section>
+    <div class="stitle">Análisis 4 · Concentración de responsables</div>
+    <h2>La fuga se reparte entre 110 ejecutivos, pero <span class="hl">7 supervisores concentran el 64%</span></h2>
+    <div class="card">
+      <div class="grid2 wide">
+        <div>
+          <div class="ctitle">Top 8 supervisores por saldo fugado (S/ MM)</div>
+          <div class="cnote">Solo 13 supervisores tienen fuga; los 7 primeros explican el 64.3% del saldo.</div>
+          <div class="chart-h"><canvas id="supChart"></canvas></div>
+        </div>
+        <div>
+          <div class="hero-num" style="font-size:52px">64.3%<small>del saldo en 7 supervisores</small></div>
+          <div class="insight blue" style="margin-top:22px"><b>La concentración juega a favor.</b> No hay que intervenir 110 ejecutivos: atacar a 7 supervisores cubre dos tercios del saldo en fuga. Es la palanca de mayor retorno para un plan de retención.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GESTION FUNNEL -->
+  <section>
+    <div class="stitle">Análisis 5 · Perfil en el funnel comercial</div>
+    <h2>Los teníamos en el funnel: <span class="hl">54% llegó a cartera</span>, pero solo el <span class="hl">41% se gestionó</span></h2>
+    <div class="card">
+      <div class="grid2">
+        <div><div class="chart-h sm"><canvas id="funnelChart"></canvas></div></div>
+        <div style="display:flex;flex-direction:column;justify-content:center">
+          <div class="insight">De los créditos que terminaron en fuga, <b>más de la mitad estaba en cartera asignada</b> — eran clientes conocidos y priorizables. Sin embargo, <b>solo 4 de cada 10 de esos llegaron a ser gestionados</b> antes de irse. La oportunidad estaba; la gestión se cayó.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVOLUCION MENSUAL -->
+  <section>
+    <div class="stitle">Análisis 6 · Evolución del saldo fugado</div>
+    <h2>La fuga se acelera: de <span class="hl">S/ 6.8 MM a S/ 14.4 MM</span>, con Tiendas al frente</h2>
+    <div class="card">
+      <div class="ctitle">Saldo cancelado mensual por canal (S/ MM)</div>
+      <div class="cnote">Tiendas crece de forma sostenida; Tiendas Virtuales cae fuerte desde Dic-25.</div>
+      <div class="chart-h"><canvas id="monthChart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ANTIGUEDAD + RANGOS -->
+  <section>
+    <div class="stitle">Análisis 7 · Perfil del crédito que se fuga</div>
+    <h2>Fuga temprana y de ticket medio: <span class="hl">48% en ≤6 meses</span>, créditos de S/ 50–100k</h2>
+    <div class="grid2">
+      <div class="card">
+        <div class="ctitle">Rango de monto desembolsado — nº créditos</div>
+        <div class="cnote">El grueso de la fuga está en S/ 50–100k (538) y 100–200k (435).</div>
+        <div class="chart-h sm"><canvas id="montoChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="ctitle">Rango de tasa de desembolso — nº créditos</div>
+        <div class="cnote">Concentración en tasa de mercado 14–18%, no en tasas altas.</div>
+        <div class="chart-h sm"><canvas id="tasaChart"></canvas></div>
+      </div>
+    </div>
+    <div class="insight" style="margin-top:18px">Mediana de <b>7 meses</b> entre desembolso y fuga; <b>48% se va en ≤6 meses</b> y <b>72% en ≤12 meses</b>. La ventana de retención es corta y empieza casi desde el desembolso.</div>
+  </section>
+
+  <div class="footer">Interbank · NBC Empresas — Advanced Analytics &amp; IA · Documento de trabajo interno. Fuente: base de fuga (compra de deuda por competencia) cruzada con SOW y banco destino. Canal según ID_CANAL_FUNNEL.</div>
+
+</div>
+
+<script>
+const BLUE='#1F4592', GREEN='#00BE50', DARK='#1B5E37', MUT='#6a7689', LINE='#e7ebf2';
+Chart.defaults.font.family="'Poppins',sans-serif";
+Chart.defaults.color=MUT;
+Chart.defaults.font.size=12;
+const fmt=v=>v.toLocaleString('es-PE');
+
+// Ticket por canal
+new Chart(ticketChart,{type:'bar',data:{
+  labels:['Tiendas','Tiendas Virtuales','TLV / Sin campaña'],
+  datasets:[
+   {label:'Ticket por saldo cancelado',data:[103,72,71],backgroundColor:BLUE,borderRadius:5},
+   {label:'Ticket por monto desembolsado',data:[146,102,92],backgroundColor:GREEN,borderRadius:5}
+  ]},
+  options:{plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': S/ '+c.parsed.y+'k'}}},
+   scales:{y:{beginAtZero:true,grid:{color:LINE},ticks:{callback:v=>'S/ '+v+'k'}},x:{grid:{display:false}}}}});
+
+// Banco destino
+new Chart(destChart,{type:'bar',data:{
+  labels:['BCP','BBVA','Scotiabank','Mibanco','Caja Piura','Caja Arequipa'],
+  datasets:[{label:'Saldo (S/ MM)',data:[27.2,12.6,6.9,1.3,0.8,0.5],backgroundColor:BLUE,borderRadius:5}]},
+  options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'S/ '+c.parsed.x+' MM'}}},
+   scales:{x:{beginAtZero:true,grid:{color:LINE},ticks:{callback:v=>'S/ '+v+' MM'}},y:{grid:{display:false}}}}});
+
+// Supervisores
+new Chart(supChart,{type:'bar',data:{
+  labels:['Palpa Ramos L.C.','Pecho Llacta F.','Roca Ramos E.','Ugaz Vásquez M.','Casimiro Fernández E.','Caceda Vértiz C.','Loayza Rivas L.','Montenegro Chávez F.'],
+  datasets:[{data:[14.0,13.1,11.5,9.7,9.6,9.5,8.0,7.6],
+   backgroundColor:c=>c.dataIndex<7?DARK:'#9fb0c9',borderRadius:5}]},
+  options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'S/ '+c.parsed.x+' MM'}}},
+   scales:{x:{beginAtZero:true,grid:{color:LINE},ticks:{callback:v=>'S/ '+v+' MM'}},y:{grid:{display:false}}}}});
+
+// Funnel gestion
+new Chart(funnelChart,{type:'bar',data:{
+  labels:['Fugados','En cartera','Gestionados'],
+  datasets:[{data:[100,54,22],backgroundColor:[BLUE,GREEN,DARK],borderRadius:5}]},
+  options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'% de los fugados'}}},
+   scales:{y:{beginAtZero:true,max:100,grid:{color:LINE},ticks:{callback:v=>v+'%'}},x:{grid:{display:false}}}}});
+
+// Evolucion mensual
+const ML=['Feb-25','Mar-25','Abr-25','May-25','Jun-25','Jul-25','Ago-25','Sep-25','Oct-25','Nov-25','Dic-25','Ene-26','Feb-26'];
+new Chart(monthChart,{type:'bar',data:{labels:ML,datasets:[
+  {label:'Tiendas',data:[2.8,2.1,1.1,2.3,3.0,4.7,3.5,7.0,5.4,6.4,6.6,9.0,10.7],backgroundColor:BLUE},
+  {label:'Tiendas Virtuales',data:[0,0,0.5,1.4,1.5,1.9,2.3,2.3,4.4,3.4,3.0,0.6,1.2],backgroundColor:GREEN},
+  {label:'TLV / Sin campaña',data:[1.4,2.2,2.7,2.1,2.3,2.9,2.2,3.6,2.7,1.7,1.4,2.2,2.5],backgroundColor:DARK}
+ ]},
+  options:{plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': S/ '+c.parsed.y+' MM'}}},
+   scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:LINE},ticks:{callback:v=>'S/ '+v+'MM'}}}}});
+
+// Rango monto
+new Chart(montoChart,{type:'bar',data:{
+  labels:['≤25k','25-50k','50-100k','100-200k','200-500k','>500k'],
+  datasets:[{data:[30,113,538,435,206,6],backgroundColor:BLUE,borderRadius:5}]},
+  options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:LINE}},x:{grid:{display:false}}}}});
+
+// Rango tasa
+new Chart(tasaChart,{type:'bar',data:{
+  labels:['<14%','14-16%','16-18%','18-20%','20-25%','≥25%'],
+  datasets:[{data:[100,451,344,240,172,21],backgroundColor:GREEN,borderRadius:5}]},
+  options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:LINE}},x:{grid:{display:false}}}}});
+</script>
+</body>
+</html>
