@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>One Pager: Modelo Predictivo Next Best Product</title>
+  
+  <!-- Cargar tipografía Poppins desde Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --white: #FFFFFF;
+      --green-dark: #005F1E;      /* RGB(0, 95, 30) */
+      --green-light: #00BE50;     /* RGB(0, 190, 80) ← este es el que usarás */
+      --green-soft: #C6FFC0;
+      --blue-primary: #1F4592;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--green-dark);
+      background-color: var(--white);
+      margin: 0;
+      padding: 0 20px;
+      max-width: 1800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .hero-title {
+      background-color: var(--green-light); /* Ahora usa #00BE50 */
+      color: var(--white);
+      font-family: 'Poppins', sans-serif;
+      font-weight: 700;
+      font-size: 2.1rem; /* Reducido desde 2.5rem */
+      text-align: center;
+      padding: 18px 20px; /* Un poco menos de padding vertical */
+      margin: 0;
+      border-radius: 8px 8px 0 0;
+    }
+
+    h2 {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 1.25rem; /* Más chiquito */
+      color: var(--blue-primary);
+      margin-top: 20px;
+      margin-bottom: 20px;
+      text-align: left; /* Alineado a la izquierda */
+    }
+
+    h3 {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 1.3rem;
+      color: var(--green-dark);
+      margin-top: 25px;
+      margin-bottom: 12px;
+    }
+
+    .section {
+      display: flex;
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .column {
+      flex: 1;
+    }
+
+    .card {
+      background-color: var(--white);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eee;
+    }
+
+    .highlight-box {
+      background-color: var(--green-soft);
+      padding: 18px;
+      border-radius: 8px;
+      margin: 15px 0;
+      color: var(--green-dark);
+    }
+
+    .kpi-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .kpi-label {
+      font-weight: 500;
+      width: 70%;
+    }
+
+    .kpi-value {
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--green-light);
+    }
+
+    .progress-bar {
+      height: 8px;
+      background-color: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: var(--green-light);
+    }
+
+    .icon-list {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .icon-list li {
+      margin-bottom: 10px;
+      padding-left: 24px;
+      position: relative;
+    }
+
+    .icon-list li::before {
+      content: "•";
+      color: var(--green-light);
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+      font-size: 1.4rem;
+      line-height: 1;
+    }
+
+    .data-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .data-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.95rem;
+      color: var(--green-dark);
+    }
+
+    .data-item::before {
+      content: "📁";
+      font-size: 1.1rem;
+      color: var(--green-light);
+    }
+
+    .feature-icon {
+      font-size: 1.4rem;
+      color: var(--green-light);
+      margin-right: 10px;
+    }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .section {
+        flex-direction: column;
+      }
+      .hero-title {
+        font-size: 1.8rem;
+        padding: 16px 15px;
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin-top: 16px;
+      }
+      .data-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1 class="hero-title">One Pager: Modelo Predictivo Next Best Product</h1>
+  
+  <h2>Cross-selling de Clientes para Potenciar Principalidad y Saldos.</h2>
+
+  <div class="section">
+    <div class="column">
+      <h3>Objetivo del Modelo</h3>
+      <p>Incrementar la principalidad y los saldos del cliente, aprovechando datos transaccionales para identificar oportunidades de cross-selling, retención y crecimiento de valor.</p>
+      
+      <div class="highlight-box">
+        <strong>Aumentará:</strong> Los clientes principales de BN, incrementando los saldos promedio y la rentabilidad mediante la adopción de productos transaccionales. 
+      </div>
+
+      <h3>KPIs Clave</h3>
+      <div class="card">
+        <div class="kpi-item">
+          <span class="kpi-label">Número de clientes principales</span>
+          <span class="kpi-value">42 K</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 67%;"></div>
+        </div>
+
+        <div class="kpi-item">
+          <span class="kpi-label">Aumento Ticket Promedio</span>
+          <span class="kpi-value">+Y %</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 60%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="column">
+      <h3>Segmento Target</h3>
+      <h2 style="font-size: 1.6rem; margin-top: 10px; text-align: left;">Clientes con cuenta negocio activa</h2>
+      <p>Enfoque en PYMEs con actividad transaccional reciente y potencial de expansión de productos.</p>
+
+      <h3>Data Histórica Relevante</h3>
+      <div class="card">
+        <div class="data-list">
+          <div> 💰 Saldos Diarios</div>
+          <div> 📑 Data Transaccional</div>
+          <div> 💳 Historial de RCC y Sistemas Financieros</div>
+          <div> 🌐 Data BPI (Digitalización de cliente)</div>
+          <div> 🏛️ SUNAT</div>
+          <div> 📦 ADEX</div>
+        </div>
+      </div>
+
+      <h3>Solución Propuesta: Modelo Predictivo</h3>
+      <div class="card">
+        <div class="feature-header">
+          <span class="feature-icon">⚙️</span>
+          <h4 style="margin: 0; font-weight: 600; color: var(--green-dark);">Desarrollo del Modelo</h4>
+        </div>
+        <p>Algoritmos de Machine Learning (ej. Collaborative Filtering, Content-Based Filtering).</p>
+
+        <div class="feature-header" style="margin-top: 20px;">
+          <span class="feature-icon">💡</span>
+          <h4 style="margin: 0; font-weight: 600; color: var(--green-dark);">Funcionalidad Clave: Recomendador</h4>
+        </div>
+        <p>El modelo predictivo:</p>
+        <ul class="icon-list">
+          <li>Analiza el perfil y comportamiento del cliente PYME.</li>
+          <li>Predice la probabilidad de interés en productos específicos.</li>
+          <li>Genera recomendaciones personalizadas y oportunas.</li>
+          <li>Facilita la venta cruzada (cross-selling) y la venta adicional (up-selling).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
