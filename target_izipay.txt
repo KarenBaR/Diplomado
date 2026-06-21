@@ -1,0 +1,391 @@
+-- ═══════════════════════════════════════════════════════════════
+-- CTAS: disc_comercial.HM_UNIVERSO_PXC_IZIPAY_RANGOS
+-- Fuentes reales:
+--   kbr_izipay_universo_hash   → universo de comercios por periodo
+--   kbr_izipay_afiliados_hash  → afiliados (N filas por RUC → colapsar)
+--   V_MST_ENCRIP_DNI_RUC_PN_HIST → mapeo key_value → RUC
+-- ═══════════════════════════════════════════════════════════════
+DROP TABLE disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET
+
+CREATE TABLE disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET
+WITH (
+    format              = 'Parquet',
+    parquet_compression = 'SNAPPY',
+    partitioned_by      = ARRAY['codmes']
+)
+AS (
+
+WITH universo_base AS (
+    -- ── PASO 1: Agrupar universo por periodo × numeroruc
+    -- numeroruc = key_value_ruc_pn si existe, sino key_value
+    -- Solo sumar importe_total_izipay cuando compania = 'IZIPAY'
+    SELECT
+        CAST(periodo AS INTEGER)                                           AS periodo,
+        CASE
+            WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn
+            ELSE A.key_value
+        END                                                                AS numeroruc,
+        CASE WHEN C.key_value IS NOT NULL THEN  C.key_value 
+             WHEN B.key_value IS NOT NULL THEN  B.key_value  ELSE  A.key_value END nro_doc,
+        
+        -- Atributos del comercio
+        MAX(razsoc)                                                        AS razsoc,
+        MAX(nombrecomercial)                                               AS nombrecomercial,
+        MAX(giro)                                                          AS giro,
+        MAX(compania)                                                      AS compania,
+        MAX(flag_active)                                                   AS flag_active,
+
+        -- ── Ventas Izipay — SOLO cuando compania = 'IZIPAY'
+        SUM(CASE WHEN UPPER(compania) = 'IZIPAY' THEN COALESCE(importe_total_izipay,      0) ELSE 0 END)  AS izi_monto,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' THEN COALESCE(importe_data_ibk,      0) ELSE 0 END)  AS noizi_monto
+   --SELECT *
+    FROM disc_comercial.kbr_izipay_universo_hash A 
+    LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B
+        ON A.key_value = B.key_value
+    LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST C
+        ON A.key_value = C.key_value_ruc_pn
+    WHERE A.key_value IS NOT NULL AND A.key_value <> ''
+    GROUP BY
+        CAST(periodo AS INTEGER),
+        CASE WHEN B.key_value_ruc_pn IS NOT NULL
+             THEN B.key_value_ruc_pn ELSE A.key_value END,
+         CASE WHEN C.key_value IS NOT NULL THEN  C.key_value 
+             WHEN B.key_value IS NOT NULL THEN  B.key_value  ELSE  A.key_value END      
+),
+
+afiliados_por_ruc AS (
+    -- ── PASO 2: Colapsar afiliados a UNA fila por RUC
+    -- Un RUC puede tener N establecimientos (N códigos distintos)
+    -- Tomamos el PRIMER mes en que algún establecimiento se afilió
+    -- Ese es el periodo_afil que define la ventana del target
+    SELECT
+        CASE  WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END   AS numeroruc,
+        MIN(fecha_apertura)                                                AS fecha_apertura,
+        CAST(SUBSTR(CAST(MIN(fecha_apertura) AS VARCHAR), 1, 6)
+             AS INTEGER)                                                   AS periodo_afil,
+        COUNT(DISTINCT codigo)                                             AS n_establecimientos
+    FROM disc_comercial.kbr_izipay_afiliados_hash A
+     LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B
+        ON A.key_value = B.key_value
+    WHERE fecha_apertura IS NOT NULL 
+          AND A.key_value IS NOT NULL AND A.key_value <> ''
+    GROUP BY CASE  WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END 
+),
+
+universo_con_afil AS (
+    -- ── PASO 3: Join universo con afiliados + flags
+    SELECT
+        u.periodo,
+        u.numeroruc,
+        u.nro_doc,
+        u.razsoc,
+        u.nombrecomercial,
+        u.giro,
+        u.compania,
+        u.izi_monto,
+        u.noizi_monto,
+        a.fecha_apertura,
+        a.periodo_afil,
+        a.n_establecimientos,
+        CASE WHEN a.numeroruc IS NOT NULL THEN 1 ELSE 0 END               AS flg_es_afiliado,
+        CASE WHEN a.numeroruc IS NOT NULL
+              AND u.periodo = a.periodo_afil THEN 1 ELSE 0 END            AS flg_afiliacion,
+        CASE WHEN a.numeroruc IS NOT NULL
+              AND u.periodo > a.periodo_afil THEN 1 ELSE 0 END            AS flg_post_afil,
+        CASE WHEN a.numeroruc IS NOT NULL
+              AND u.periodo < a.periodo_afil THEN 1 ELSE 0 END            AS flg_pre_afil
+    FROM universo_base u
+    LEFT JOIN afiliados_por_ruc a ON u.numeroruc = a.numeroruc
+),
+
+con_rangos_quintil AS (
+    -- ── PASO 4: Rango del mes + quintil
+    SELECT
+        *,
+        CASE
+            WHEN izi_monto = 0      THEN '0'
+            WHEN izi_monto < 500    THEN '1_0_500'
+            WHEN izi_monto < 1000   THEN '2_500_1k'
+            WHEN izi_monto < 2000   THEN '3_1k_2k'
+            WHEN izi_monto < 3000   THEN '4_2k_3k'
+            WHEN izi_monto < 5000   THEN '5_3k_5k'
+            WHEN izi_monto < 8000   THEN '6_5k_8k'
+            WHEN izi_monto < 8000   THEN '7_8k_10k'
+            ELSE                         '7_10k_mas'
+        END                                                                AS rango_mes,
+        NTILE(5) OVER (
+            PARTITION BY periodo ORDER BY izi_monto
+        )                                                                  AS quintil_mes
+    FROM universo_con_afil
+),
+
+con_lead AS (
+    -- ── PASO 5: Look-ahead T+1, T+2, T+3
+    SELECT
+        *,
+        LEAD(izi_monto, 1) OVER (
+            PARTITION BY numeroruc ORDER BY periodo)                       AS izi_t1,
+        LEAD(izi_monto, 2) OVER (
+            PARTITION BY numeroruc ORDER BY periodo)                       AS izi_t2,
+        LEAD(izi_monto, 3) OVER (
+            PARTITION BY numeroruc ORDER BY periodo)                       AS izi_t3,
+        CASE WHEN LEAD(izi_monto,1) OVER (
+            PARTITION BY numeroruc ORDER BY periodo) IS NOT NULL
+             THEN 1 ELSE 0 END                                             AS flag_t1,
+        CASE WHEN LEAD(izi_monto,2) OVER (
+            PARTITION BY numeroruc ORDER BY periodo) IS NOT NULL
+             THEN 1 ELSE 0 END                                             AS flag_t2,
+        CASE WHEN LEAD(izi_monto,3) OVER (
+            PARTITION BY numeroruc ORDER BY periodo) IS NOT NULL
+             THEN 1 ELSE 0 END                                             AS flag_t3
+    FROM con_rangos_quintil
+),
+
+con_target AS (
+    -- ── PASO 6: Calcular promedio, rango target y targets binarios
+    SELECT
+        *,
+        -- Promedio próximos 3 meses (solo sobre meses que existen)
+        CASE
+            WHEN flag_t1=1 AND flag_t2=1 AND flag_t3=1
+            THEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)+COALESCE(izi_t3,0)) / 3.0
+            WHEN flag_t1=1 AND flag_t2=1
+            THEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)) / 2.0
+            WHEN flag_t1=1
+            THEN CAST(COALESCE(izi_t1,0) AS DOUBLE)
+            ELSE NULL
+        END                                                                AS izi_prom_prox3m,
+
+        -- Rango del target (basado en promedio T+1,T+2,T+3)
+        CASE
+            WHEN flag_t1 = 0
+            THEN 'sin_target'
+            WHEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)+COALESCE(izi_t3,0))/3.0 = 0
+            THEN 'sin_ventas'
+            WHEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)+COALESCE(izi_t3,0))/3.0 < 1000
+            THEN 'bajo_0_1k'
+            WHEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)+COALESCE(izi_t3,0))/3.0 < 2000
+            THEN 'medio_1k_2k'
+            WHEN (COALESCE(izi_t1,0)+COALESCE(izi_t2,0)+COALESCE(izi_t3,0))/3.0 < 5000
+            THEN 'medio_alto_2k_5k'
+            ELSE 'alto_5k_mas'
+        END                                                                AS rango_target,
+
+        -- ── TARGET PROPENSIÓN
+        -- Ventana: T0 (mes afiliación) + T+1 + T+2
+        -- Solo tiene valor donde flg_afiliacion = 1 Y hay T+1 y T+2
+
+        -- Valores de la ventana
+        CASE WHEN flg_afiliacion=1 THEN izi_monto ELSE NULL END           AS target_t0,
+        CASE WHEN flg_afiliacion=1 THEN izi_t1    ELSE NULL END           AS target_t1,
+        CASE WHEN flg_afiliacion=1 THEN izi_t2    ELSE NULL END           AS target_t2,
+
+        -- Y principal: ≥2 de (T0, T+1, T+2) con ventas ≥ S/.5K
+        CASE
+            WHEN flg_afiliacion=1 AND flag_t1=1 AND flag_t2=1
+            THEN CASE WHEN (
+                    CASE WHEN izi_monto          >=5000 THEN 1 ELSE 0 END +
+                    CASE WHEN COALESCE(izi_t1,0) >=5000 THEN 1 ELSE 0 END +
+                    CASE WHEN COALESCE(izi_t2,0) >=5000 THEN 1 ELSE 0 END
+                 ) >= 2 THEN 1 ELSE 0 END
+            ELSE NULL
+        END                                                                AS y_afil_2de3_5k,
+
+        -- Y alternativo: ≥1 de los 3 meses ≥ S/.5K
+        CASE
+            WHEN flg_afiliacion=1 AND flag_t1=1 AND flag_t2=1 AND flag_t3=1
+            THEN CASE WHEN (
+                    CASE WHEN COALESCE(izi_t1,0) >=5000 THEN 1 ELSE 0 END +
+                    CASE WHEN COALESCE(izi_t2,0) >=5000 THEN 1 ELSE 0 END +
+                    CASE WHEN COALESCE(izi_t3,0) >=5000 THEN 1 ELSE 0 END
+                 ) >= 1 THEN 1 ELSE 0 END
+            ELSE NULL
+        END                                                                AS y_afil_1de3_5k,
+
+        -- Flags de completitud
+        CASE WHEN flg_afiliacion=1 AND flag_t1=1 AND flag_t2=1
+             THEN 1 ELSE 0 END                                             AS flag_target_afil_ok,
+        CASE WHEN flag_t1=1 AND flag_t2=1 AND flag_t3=1
+             THEN 1 ELSE 0 END                                             AS flag_target_ok
+
+    FROM con_lead
+)
+
+-- ── SELECT FINAL ─────────────────────────────────────────────
+-- codmes AL FINAL (partición Athena)
+SELECT
+    numeroruc,
+    nro_doc,
+    razsoc,
+    nombrecomercial,
+    giro,
+    compania,
+    n_establecimientos,
+    -- Ventas del mes
+    izi_monto,
+   noizi_monto,
+    -- Posición en el mes
+    rango_mes,
+    quintil_mes,
+    -- Afiliación
+    fecha_apertura,
+    periodo_afil,
+    flg_es_afiliado,
+    flg_afiliacion,
+    flg_post_afil,
+    flg_pre_afil,
+    -- Look-ahead
+    izi_t1, izi_t2, izi_t3,
+    flag_t1, flag_t2, flag_t3,
+    -- Target
+    izi_prom_prox3m,
+    rango_target,
+    target_t0, target_t1, target_t2,
+    y_afil_2de3_5k,
+    y_afil_1de3_5k,
+    flag_target_afil_ok,
+    flag_target_ok,
+    -- PARTICIÓN AL FINAL
+    CAST(periodo AS VARCHAR(6))                                            AS codmes
+FROM con_target);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- VALIDACIONES
+-- ═══════════════════════════════════════════════════════════════
+
+-- V1: Conteo general
+SELECT COUNT(*) n_filas, COUNT(DISTINCT numeroruc) n_rucs,
+       MIN(codmes) primer_periodo, MAX(codmes) ultimo_periodo
+FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET;
+
+
+
+-- V2: Event rate del target principal
+SELECT COUNT(*) n_afil, SUM(y_afil_2de3_5k) n_y1,
+       ROUND(AVG(CAST(y_afil_2de3_5k AS DOUBLE))*100,2) event_rate_pct
+FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET
+WHERE flg_afiliacion=1 AND flag_target_afil_ok=1;
+
+-- V3: Distribución rango_target
+SELECT rango_target, COUNT(*) n,
+       ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER(),2) pct
+FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET
+WHERE flag_target_ok=1
+GROUP BY rango_target ORDER BY rango_target;
+
+-- V4: Event rate por periodo
+
+SELECT 
+    codmes, 
+    COUNT(*) AS n, 
+    SUM(y_afil_2de3_5k) AS n_y1,
+    ROUND(100.0 * SUM(y_afil_2de3_5k) / COUNT(*), 2) AS event_rate_pct
+FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET
+WHERE rango_target = 'alto_5k_mas'
+GROUP BY codmes 
+ORDER BY codmes;
+
+
+
+
+-- V5: Verificar colapso de establecimientos
+SELECT n_establecimientos, COUNT(DISTINCT numeroruc) n_rucs
+FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_RANGOS
+WHERE flg_es_afiliado=1
+GROUP BY n_establecimientos ORDER BY n_establecimientos;
+
+
+
+SELECT * FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET LIMIT 1000
+
+SELECT a.codmes, a.key_value,
+CASE  WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END   AS numeroruc,
+cre_sldtotfinprm02,cre_sldtotfinprm03,max_sldtotfinpr03m,max_sldtotfinpr06m
+cre_sldtotfintrxm03,cre_sldtotfintrxm06,max_sldtotfintrx06m,max_sldtotfintrx03m,prm_sldtotfintrx12m,prm_sldtotfintrx06m,prm_sldtotfintrx03m,
+max_sldtotfinplz03m,max_sldtotfinplz06m,max_sldtotprmpr03m,max_sldtotprmpr06m
+FROM e_perm_aws.tbl_sldibk_agg01_pas_mdl a 
+LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B
+        ON A.key_value = B.key_value
+where a.codmes = '202508'and  (CASE  WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END) = '8AD8167130D431954721E54B1C901FB62390066398CCBB0935927FF3BDAFAF23'  
+
+
+SELECT  codmes , count(*) FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET  where  rango_target =   'alto_5k_mas'
+SELECT  * FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET  where  rango_target =   'alto_5k_mas'
+
+SELECT * FROM  disc_comercial.HM_TRANSACCIONES_POS_VPC where  num_ruc_val = '8AD8167130D431954721E54B1C901FB62390066398CCBB0935927FF3BDAFAF23'  
+
+SELECT * FROM  e_perm_aws.t_rsk_vars_mdl_rcc_sldo  WHERE coddoc  = '664DC91E79CF16AAD401ECF194442CF46750E1B2AFF501CC366189DECCFC97F0' and tipdoc='1'
+
+ 
+SELECT 
+    periodo_campania,
+    numeroruc,
+    COUNT(*) AS cantidad
+FROM disc_comercial.hm_kbr_base_modelo_izipay
+GROUP BY periodo_campania, numeroruc
+HAVING COUNT(*) > 1
+ORDER BY periodo_campania;
+
+
+SELECT periodo, COUNT(*) , COUNT(DISTINCT key_value) FROM  disc_comercial.kbr_izipay_universo_hash where compania<> 'IZIPAY' GROUP BY periodo
+SELECT periodo, COUNT(*),COUNT(DISTINCT key_value)  FROM  disc_comercial.kbr_izipay_universo_hash where compania= 'IZIPAY' GROUP BY periodo
+
+SELECT * FROM disc_comercial.kbr_izipay_afiliados_hash where  key_value = '8AA6178014962ABFB6E46DBF399F2A46C5B36A530F43B87F7165B17AFD851A39'
+SELECT * FROM disc_comercial.kbr_izipay_universo_hash where  key_value = 'BCAE4D4BB5D1C45334825D37B7D5C013D9D8D590AB26FB9300E486256ABC391B'
+
+SELECT  * FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET  where  numeroruc = '01A9C657DE8BC4C98BD0A941FCDF686101D64CCADA3EE9B045FD3C28C4F6047E'
+
+SELECT *  FROM disc_comercial.hm_kbr_base_modelo_izipay    where  numeroruc = 'BCAE4D4BB5D1C45334825D37B7D5C013D9D8D590AB26FB9300E486256ABC391B'
+                
+SELECT *     FROM disc_comercial.hm_kbr_base_modelo_izipay    where  target = 1  
+
+
+SELECT * FROM disc_comercial.hm_var_sunat_reniec_izipay_sg WHERE  NUM_RUC =  'BCAE4D4BB5D1C45334825D37B7D5C013D9D8D590AB26FB9300E486256ABC391B'
+
+rep_legal AS (
+    SELECT
+        ruc_value       AS ruc_hash_empresa,
+        tip_doc,
+        key_value       AS dni_hash_rrll,
+        des_cargo,
+        fec_vigencia,
+        estado,
+        fec_proceso,
+        est_registro
+    FROM e_perm_aws.t_mst_rep_legal_sunat_rsk  WHERE  ruc_value  IN (SELECT DISTINCT numeroruc FROM disc_comercial.hm_kbr_base_modelo_izipay)
+),
+
+
+      SELECT  * FROM disc_comercial.hm_kbr_base_modelo_izipay  limit 100
+
+
+SELECT 
+    periodo_campania,
+    numeroruc,
+    COUNT(*) AS veces
+FROM disc_comercial.hm_kbr_base_modelo_izipay
+GROUP BY periodo_campania, numeroruc
+HAVING COUNT(*) > 1
+ORDER BY veces DESC;
+
+SELECT * FROM disc_comercial.hm_kbr_base_modelo_izipay WHERE numeroruc ='E261128F8516D5D64C30EB3D21F4BA577EFD83964C320224BF63F28C885EA161'
+SELECT * FROM e_perm_aws.tbl_sldibk_agg01_pas_mdl WHERE codmes = '202507' AND key_value = '60F3A92AA0A631E7B860202BFDCCE732DAA249E366404D4939C4AFF1E00D432D'
+
+CASE  WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END
+
+SELECT * FROM e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST WHERE  key_value_ruc_pn  ='E261128F8516D5D64C30EB3D21F4BA577EFD83964C320224BF63F28C885EA161'

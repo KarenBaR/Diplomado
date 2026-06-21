@@ -1,0 +1,335 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- QUERY COMPLETA: UNIVERSO TIENDAS + REPRESENTANTES LEGALES + RCC PERSONAS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Autor: Karen Sofia Barrozo
+-- Fecha: 2026-05-15
+-- Objetivo: Integrar datos de vinculados (RRLL + cónyuge + RCC) al universo NBC
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 1: CREAR TABLA CON PARTICIÓN POR CODMES
+-- ═══════════════════════════════════════════════════════════════════════════
+--DROP TABLE disc_comercial.HM_IZIPAY_RRLL
+
+
+CREATE TABLE disc_comercial.HM_IZIPAY_RRLL
+WITH (
+    format = 'Parquet',
+    parquet_compression = 'SNAPPY',
+    partitioned_by = ARRAY['codmes']
+)
+AS (
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 2: UNIVERSO BASE (CLIENTES TIENDAS)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+WITH base AS (
+    SELECT
+        --periodo_campania,numeroruc
+        periodo periodo_campania, nro_doc numeroruc
+      FROM disc_comercial.kbr_base_cliente_vpc_market_hash 
+      --select *
+    --FROM disc_comercial.hm_kbr_base_modelo_izipay f 
+),
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 3: REPRESENTANTES LEGALES (HASH → RUC EMPRESA)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+rep_legal AS (
+    SELECT
+        ruc_value       AS ruc_hash_empresa,
+        tip_doc,
+        key_value       AS dni_hash_rrll,
+        des_cargo,
+        fec_vigencia,
+        estado,
+        fec_proceso,
+        est_registro
+    FROM e_perm_aws.t_mst_rep_legal_sunat_rsk
+),
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 5: RCC PERSONAS NATURALES (DEUDA + CALIFICACIÓN)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+rcc_personas AS (
+    SELECT
+        codmes,
+        tip_doc,
+        key_value       AS dni_hash,
+        
+        -- ── M01 (mes más reciente) ────────────────────────
+        lintot_m01,
+        saltot_m01,
+        salvig_m01,
+        clasif_sbs_m01,
+        pct_clasif_per_m01,
+        pct_clasif_dud_m01,
+        pct_clasif_def_m01,
+        pct_clasif_cpp_m01,
+        pct_clasif_nor_m01,
+        
+        -- ── M02 (mes anterior) ────────────────────────────
+        saltot_m02,
+        salvig_m02,
+        clasif_sbs_m02,
+        
+        -- ── M03 (2 meses antes) ───────────────────────────
+        saltot_m03,
+        salvig_m03,
+        clasif_sbs_m03,
+        
+        -- ── Agregados útiles ──────────────────────────────
+        ctd_ent_tot_m01 AS cant_entidades,
+        ctd_prod_m01    AS cant_productos
+        
+    FROM e_perm_aws.tbl_rcc_per_allsf_mdl
+),
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 7: JOIN FUNNEL → REP LEGAL → RENIEC → RCC
+-- ═══════════════════════════════════════════════════════════════════════════
+
+base_con_rrll AS (
+    SELECT
+        -- ── Datos cliente empresa ─────────────────────────
+        f.*,
+        
+        -- ── Datos representante legal ─────────────────────
+        CASE WHEN rl.dni_hash_rrll IS NOT NULL THEN rl.dni_hash_rrll ELSE D.key_value END dni_hash_rrll,
+        rl.des_cargo,
+        rl.fec_vigencia,
+        
+
+        -- ── RCC representante legal ───────────────────────
+        rcc.lintot_m01          AS rrll_linea_total,
+        rcc.saltot_m01          AS rrll_deuda_total,
+        rcc.salvig_m01          AS rrll_deuda_vigente,
+        rcc.clasif_sbs_m01      AS rrll_calificacion,
+        rcc.pct_clasif_per_m01  AS rrll_pct_perdida,
+        rcc.pct_clasif_dud_m01  AS rrll_pct_dudoso,
+        rcc.pct_clasif_def_m01  AS rrll_pct_deficiente,
+        rcc.pct_clasif_cpp_m01  AS rrll_pct_cpp,
+        rcc.pct_clasif_nor_m01  AS rrll_pct_normal,
+        rcc.cant_entidades      AS rrll_cant_entidades,
+        rcc.cant_productos      AS rrll_cant_productos,
+        
+        -- ── Variaciones deuda RRLL (m01 vs m03) ──────────
+        COALESCE(rcc.saltot_m01, 0) - COALESCE(rcc.saltot_m03, 0) AS rrll_var_deuda_3m
+
+    FROM base f
+    
+    --- RUC TO DNI 
+     LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST D
+        ON f.numeroruc = D.key_value_ruc_pn
+
+    -- Join representantes legales
+    LEFT JOIN rep_legal rl
+        ON f.numeroruc = rl.ruc_hash_empresa
+    
+
+    -- Join RCC personas (periodo - 2 meses)
+    LEFT JOIN rcc_personas rcc
+        ON rl.dni_hash_rrll = rcc.dni_hash
+        AND rl.tip_doc = rcc.tip_doc
+        AND rcc.codmes = date_format(date_add('month', -2, date_parse(f.periodo_campania, '%Y%m')), '%Y%m' )
+
+)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 9: RESULTADO FINAL CON PARTICIÓN
+-- ═══════════════════════════════════════════════════════════════════════════
+
+SELECT
+    b.*,
+    
+    -- ── Campo para partición ──────────────────────────
+    date_format(
+        date_add('month', -2, date_parse(b.periodo_campania, '%Y%m')), 
+        '%Y%m'
+    ) AS codmes
+
+FROM base_con_rrll b
+
+);
+
+
+--SELECT * FROM disc_comercial.HM_IZIPAY_RRLL  LIMIT 1000
+
+--###########################################################################################################################################################################
+--###########################################################################################################################################################################
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 1: CREAR TABLA CON PARTICIÓN POR CODMES
+-- ═══════════════════════════════════════════════════════════════════════════
+--DROP TABLE disc_comercial.HM_RRLL_MODELO_IZIPAY
+
+
+CREATE TABLE disc_comercial.HM_RRLL_MODELO_IZIPAY
+WITH (
+    format = 'Parquet',
+    parquet_compression = 'SNAPPY',
+    partitioned_by = ARRAY['codmes']
+)
+AS (
+
+WITH empresa AS (
+    SELECT
+        periodo_campania,
+        periodo_campania codmes,
+        numeroruc,
+        dni_hash_rrll,
+        COALESCE(rrll_linea_total, 0) AS rrll_linea_total,
+        COALESCE(rrll_deuda_total, 0) AS rrll_deuda_total,
+        COALESCE(rrll_deuda_vigente, 0) AS rrll_deuda_vigente,
+        COALESCE(rrll_cant_entidades, 0) AS rrll_cant_entidades,
+        
+          COALESCE(cre_sldtotfinprm02,0)  cre_sldtotfinprm02,   --Crecimiento del saldo total al fin del período en pasivos retail en Interbank del mes de ejecución respecto a hace dos meses.
+            COALESCE(cre_sldtotfinprm03,0) cre_sldtotfinprm03,  --Crecimiento del saldo total al fin del período en pasivos retail en Interbank del mes de ejecución respecto a hace tres meses.
+            COALESCE(max_sldtotfinpr03m,0) max_sldtotfinpr03m,   --Máximo saldo total al fin de período en pasivos retail en Interbank en los últimos tres meses respecto al mes de ejecución de los modelos.
+            COALESCE(max_sldtotfinpr06m,0) max_sldtotfinpr06m,  --Máximo saldo total al fin de período en pasivos retail en Interbank en los últimos seis meses respecto al mes de ejecución de los modelos.
+            COALESCE(cre_sldtotfintrxm03,0) cre_sldtotfintrxm03,  --Crecimiento del saldo total al fin del período en transacciones (cuenta simple y cuenta ágil) de Interbank del mes de ejecución respecto a hace tres meses.
+            COALESCE(cre_sldtotfintrxm06,0) cre_sldtotfintrxm06,  --Crecimiento del saldo total al fin del período en transacciones (cuenta simple y cuenta ágil) de Interbank del mes de ejecución respecto a hace seis meses.
+            COALESCE(max_sldtotfintrx06m,0) max_sldtotfintrx06m,   --Máximo saldo total al fin de período en transacciones (cuenta simple y cuenta ágil) de Interbank en los últimos seis meses respecto al mes de ejecución de los modelos.
+            COALESCE(max_sldtotfintrx03m,0) max_sldtotfintrx03m,   --Máximo saldo total al fin de período en transacciones (cuenta simple y cuenta ágil) de Interbank en los últimos tres meses respecto al mes de ejecución de los modelos.
+            COALESCE(prm_sldtotfintrx12m,0) prm_sldtotfintrx12m,   --Promedio saldo total al fin de período en transacciones (cuenta simple y cuenta ágil) de Interbank en los últimos doce meses respecto al mes de ejecución de los modelos.
+            COALESCE(prm_sldtotfintrx06m,0) prm_sldtotfintrx06m,  --Promedio saldo total al fin de período en transacciones (cuenta simple y cuenta ágil) de Interbank en los últimos 6 meses respecto al mes de ejecución de los modelos.
+            COALESCE(prm_sldtotfintrx03m,0) prm_sldtotfintrx03m,  --Promedio saldo total al fin de período en transacciones (cuenta simple y cuenta ágil) de Interbank en los últimos 3 meses respecto al mes de ejecución de los modelos.
+            COALESCE(max_sldtotprmpr03m,0) max_sldtotprmpr03m,  --Máximo saldo total promedio en pasivos retail en Interbank en los últimos tres meses respecto al mes de ejecución.
+            COALESCE(max_sldtotprmpr06m,0)  max_sldtotprmpr06m, --Máximo saldo total promedio en pasivos retail en Interbank en los últimos 6 meses respecto al mes de ejecución.
+         COALESCE(cre_sldtotfinprm06,0)  cre_sldtotfinprm06, 
+         COALESCE(rat_sldtotfinprm06,-99)  rat_sldtotfinprm06, 
+         COALESCE(rat_sldtotfinprm12,-99)  rat_sldtotfinprm12, 
+         COALESCE(prm_sldtotfinpr12m,0)  prm_sldtotfinpr12m, 
+         
+       -- RCC PERSONA
+    COALESCE(SFP.max_linea_tc_tot_u3m,0) max_linea_tc_tot_u3m, --Valor Maximo Linea Tarjeta De Credito Total Ultimos 6 Meses
+    COALESCE(SFP.max_linea_tc_tot_u1a,0) max_linea_tc_tot_u1a, --Valor Minimo Linea Tarjeta De Credito Total Ultimo Año
+    COALESCE(SFP.max_linea_tc_max_u6m,0) max_linea_tc_max_u6m, --Valor Maximo Linea Tarjeta De Credito Maximo Ultimos 6 Meses
+    COALESCE(SFP.max_pct_uso_tctot_u3m,0) max_pct_uso_tctot_u3m, --Valor Maximo Porcentaje Uso Tarjeta De Credito Total Ultimos 3 Meses
+    COALESCE(SFP.max_pct_uso_tcibk_u3m,0) max_pct_uso_tcibk_u3m,  --Valor Maximo Porcentaje Uso Tarjeta Credito Ibk Ultimos 3 Meses
+    COALESCE(SFP.max_pct_uso_tcibk_u6m,0) max_pct_uso_tcibk_u6m,  --Valor Maximo Porcentaje Uso Tarjeta Credito Ibk Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_hip_u6m,0) max_saldo_hip_u6m,   --Valor Maximo Saldo Hipotecario Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_hip_u1a,0) max_saldo_hip_u1a,   --Valor Maximo Saldo Hipotecario Ultimo Año
+    COALESCE(SFP.max_saldo_vehi_u3m,0) max_saldo_vehi_u3m, --Valor Maximo Saldo Vehicular Ultimos 3 Meses
+    COALESCE(SFP.max_saldo_vehi_u6m,0) max_saldo_vehi_u6m, --Valor Maximo Saldo Vehicular Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_vehi_u1a,0) max_saldo_vehi_u1a, --Valor Maximo Saldo Vehicular Ultimo Año
+    COALESCE(SFP.max_saldo_pp_u3m,0) max_saldo_pp_u3m,    --Valor Maximo Saldo Prestamo Personal Ultimos 3 Meses
+    COALESCE(SFP.saldo_pp_u1m,0) saldo_pp_u1m,   --Valor Saldo Prestamo Personal Ultimo Mes
+    COALESCE(SFP.max_saldo_pp_u6m,0) max_saldo_pp_u6m,  --Valor Maximo Saldo Prestamo Personal Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_pc_u3m,0) max_saldo_pc_u3m,  -- Valor Maximo Saldo Prestamos Comerciales Ultimos 3 Meses
+    COALESCE(SFP.max_saldo_pc_u6m,0) max_saldo_pc_u6m, -- Valor Maximo Saldo Prestamos Comerciales Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_pc_u1a,0) max_saldo_pc_u1a, --Valor Maximo Saldo Prestamos Comerciales Ultimo Año
+    COALESCE(SFP.max_saldo_p_u3m,0) max_saldo_p_u3m, -- Valor Maximo Saldo Prestamos Comerciales Y Personales Ultimos 3 Meses
+    COALESCE(SFP.max_saldo_p_u6m,0) max_saldo_p_u6m, -- Valor Maximo Saldo Prestamos Comerciales Y Personales Ultimos 6 Meses
+    COALESCE(SFP.max_saldo_p_u1a,0) max_saldo_p_u1a,  -- Valor Maximo Saldo Prestamos Comerciales Y Personales Ultimo Año
+    COALESCE(SFP.max_saldo_tc_tot_u3m,0) max_saldo_tc_tot_u3m,  --Valor Maximo Saldo Tarjeta De Credito Total Ultimos 3 Meses
+    COALESCE(SFP.max_saldo_tc_tot_u6m,0) max_saldo_tc_tot_u6m  --Valor Maximo Saldo Tarjeta De Credito Total Ultimos 6 Meses
+    FROM disc_comercial.HM_IZIPAY_RRLL a
+   LEFT JOIN (SELECT codmes, a.key_value,
+                    cre_sldtotfinprm02,cre_sldtotfinprm03,max_sldtotfinpr03m,max_sldtotfinpr06m,
+                    cre_sldtotfintrxm03,cre_sldtotfintrxm06,max_sldtotfintrx06m,max_sldtotfintrx03m,prm_sldtotfintrx12m,prm_sldtotfintrx06m,prm_sldtotfintrx03m,
+                    max_sldtotfinplz03m,max_sldtotfinplz06m,max_sldtotprmpr03m,max_sldtotprmpr06m,cre_sldtotfinprm06,rat_sldtotfinprm03,rat_sldtotfinprm06,rat_sldtotfinprm12,
+                    prm_sldtotfinpr12m
+                    FROM e_perm_aws.tbl_sldibk_agg01_pas_mdl a 
+                    LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B
+                            ON A.key_value = B.key_value
+                    
+                    WHERE a.key_value IN (SELECT DISTINCT dni_hash_rrll FROM disc_comercial.HM_IZIPAY_RRLL) 
+                    )  sld
+                    
+    ON A.dni_hash_rrll = sld.key_value  AND CAST(A.periodo_campania AS VARCHAR) = SUBSTR(REPLACE(SUBSTR(CAST(date_add('month', +1, DATE_PARSE(CAST(sld.codmes AS VARCHAR), '%Y%m')) AS VARCHAR), 1, 10), '-', ''), 1, 6)  
+    
+      LEFT JOIN (SELECT * FROM  e_perm_aws.t_rsk_vars_mdl_rcc_sldo  WHERE coddoc IN (SELECT DISTINCT nro_doc FROM disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET) and  tipdoc='1')  SFP
+    ON A.dni_hash_rrll = SFP.coddoc  AND CAST(A.periodo_campania AS VARCHAR) = SUBSTR(REPLACE(SUBSTR(CAST(date_add('month', +2, DATE_PARSE(CAST(SFP.codmes AS VARCHAR), '%Y%m')) AS VARCHAR), 1, 10), '-', ''), 1, 6)   
+    
+)
+
+SELECT
+    e.periodo_campania,
+    e.numeroruc,
+
+
+    -- ── LÍNEAS Y DEUDA RRLL (montos → SUM)
+    SUM(COALESCE(rrll_linea_total,    0))                AS rrll_linea_total,
+    SUM(COALESCE(rrll_deuda_total,    0))                AS rrll_deuda_total,
+    SUM(COALESCE(rrll_deuda_vigente,  0))                AS rrll_deuda_vigente,
+
+    -- ── CANTIDAD DE ENTIDADES (conteo → MAX)
+    MAX(COALESCE(rrll_cant_entidades, 0))                AS rrll_cant_entidades,
+
+    -- ── CRECIMIENTOS / VARIACIONES (% → AVG)
+    AVG(cre_sldtotfinprm02)                              AS cre_sldtotfinprm02_rrll,
+    AVG(cre_sldtotfinprm03)                              AS cre_sldtotfinprm03_rrll,
+    AVG(cre_sldtotfintrxm03)                             AS cre_sldtotfintrxm03_rrll,
+    AVG(cre_sldtotfintrxm06)                             AS cre_sldtotfintrxm06_rrll,
+    
+    AVG(cre_sldtotfinprm06)                             AS cre_sldtotfinprm06_rrll,
+    AVG(rat_sldtotfinprm06)                             AS rat_sldtotfinprm06_rrll,
+    AVG(rat_sldtotfinprm12)                             AS rat_sldtotfinprm12_rrll,
+
+    -- ── SALDOS PASIVOS RETAIL (montos → SUM)
+    SUM(COALESCE(max_sldtotfinpr03m,  0))                AS max_sldtotfinpr03m_rrll,
+    SUM(COALESCE(max_sldtotfinpr06m,  0))                AS max_sldtotfinpr06m_rrll,
+
+    -- ── SALDOS TRANSACCIONALES (montos → SUM)
+    SUM(COALESCE(max_sldtotfintrx03m, 0))                AS max_sldtotfintrx03m_rrll,
+    SUM(COALESCE(max_sldtotfintrx06m, 0))                AS max_sldtotfintrx06m_rrll,
+    SUM(COALESCE(prm_sldtotfintrx03m, 0))                AS prm_sldtotfintrx03m_rrll,
+    SUM(COALESCE(prm_sldtotfintrx06m, 0))                AS prm_sldtotfintrx06m_rrll,
+    SUM(COALESCE(prm_sldtotfintrx12m, 0))                AS prm_sldtotfintrx12m_rrll,
+    SUM(COALESCE(prm_sldtotfinpr12m, 0))                AS prm_sldtotfinpr12mm_rrll,
+
+
+    -- ── SALDOS PROMEDIO PASIVOS (montos → SUM)
+    SUM(COALESCE(max_sldtotprmpr03m,  0))                AS max_sldtotprmpr03m_rrll,
+    SUM(COALESCE(max_sldtotprmpr06m,  0))                AS max_sldtotprmpr06m_rrll,
+
+    -- ── LÍNEAS TARJETA DE CRÉDITO (montos → SUM)
+    SUM(COALESCE(max_linea_tc_tot_u3m, 0))               AS max_linea_tc_tot_u3m_rrll,
+    SUM(COALESCE(max_linea_tc_tot_u1a, 0))               AS max_linea_tc_tot_u1a_rrll,
+    SUM(COALESCE(max_linea_tc_max_u6m, 0))               AS max_linea_tc_max_u6m_rrll,
+
+    -- ── PORCENTAJES DE USO (% → MAX)
+    MAX(COALESCE(max_pct_uso_tctot_u3m, 0))              AS max_pct_uso_tctot_u3m_rrll,
+    MAX(COALESCE(max_pct_uso_tcibk_u3m, 0))              AS max_pct_uso_tcibk_u3m_rrll,
+    MAX(COALESCE(max_pct_uso_tcibk_u6m, 0))              AS max_pct_uso_tcibk_u6m_rrll,
+
+    -- ── SALDOS HIPOTECARIOS (montos → SUM)
+    SUM(COALESCE(max_saldo_hip_u6m, 0))                  AS max_saldo_hip_u6m_rrll,
+    SUM(COALESCE(max_saldo_hip_u1a, 0))                  AS max_saldo_hip_u1a_rrll,
+
+    -- ── SALDOS VEHICULARES (montos → SUM)
+    SUM(COALESCE(max_saldo_vehi_u3m, 0))                 AS max_saldo_vehi_u3m_rrll,
+    SUM(COALESCE(max_saldo_vehi_u6m, 0))                 AS max_saldo_vehi_u6m_rrll,
+    SUM(COALESCE(max_saldo_vehi_u1a, 0))                 AS max_saldo_vehi_u1a_rrll,
+
+    -- ── SALDOS PRÉSTAMO PERSONAL (montos → SUM)
+    SUM(COALESCE(max_saldo_pp_u3m, 0))                   AS max_saldo_pp_u3m_rrll,
+    SUM(COALESCE(saldo_pp_u1m,     0))                   AS saldo_pp_u1m_rrll,
+    SUM(COALESCE(max_saldo_pp_u6m, 0))                   AS max_saldo_pp_u6m_rrll,
+
+    -- ── SALDOS PRÉSTAMO COMERCIAL (montos → SUM)
+    SUM(COALESCE(max_saldo_pc_u3m, 0))                   AS max_saldo_pc_u3m_rrll,
+    SUM(COALESCE(max_saldo_pc_u6m, 0))                   AS max_saldo_pc_u6m_rrll,
+    SUM(COALESCE(max_saldo_pc_u1a, 0))                   AS max_saldo_pc_u1a_rrll,
+
+    -- ── SALDOS COMBINADOS COMERCIAL + PERSONAL (montos → SUM)
+    SUM(COALESCE(max_saldo_p_u3m, 0))                    AS max_saldo_p_u3m_rrll,
+    SUM(COALESCE(max_saldo_p_u6m, 0))                    AS max_saldo_p_u6m_rrll,
+    SUM(COALESCE(max_saldo_p_u1a, 0))                    AS max_saldo_p_u1a_rrll,
+
+    -- ── SALDOS TARJETA DE CRÉDITO (montos → SUM)
+    SUM(COALESCE(max_saldo_tc_tot_u3m, 0))               AS max_saldo_tc_tot_u3m_rrll,
+    SUM(COALESCE(max_saldo_tc_tot_u6m, 0))               AS max_saldo_tc_tot_u6m_rrll,
+    max(codmes) codmes
+FROM empresa e
+
+group BY 1, 2  )
+
+
+
+--select * from disc_comercial.HM_RRLL_MODELO_IZIPAY
+
+ --SELECT periodo_campania, count(*) a, count(distinct numeroruc) a FROM disc_comercial.HM_RRLL_MODELO_IZIPAY    group  by periodo_campania

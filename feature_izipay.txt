@@ -1,0 +1,378 @@
+-- ═══════════════════════════════════════════════════════════════
+-- CTAS: disc_comercial.HM_FEATURES_IZI_UNIVERSO
+-- Features de ventas Izipay por numeroruc × periodo
+--
+-- ESTRATEGIA SIN WINDOW FUNCTIONS:
+-- En lugar de LEAD/LAG/AVG OVER(), usamos self-joins:
+-- cada CTE trae los datos de un periodo específico (T, T-1, T-2, etc.)
+-- y los juntamos con el periodo actual para calcular diferencias,
+-- promedios y máximos manualmente.
+--
+-- VENTAJAS:
+--   - Compatible con todos los motores Presto/Athena
+--   - Más explícito: cada columna muestra exactamente qué periodos usa
+--   - Fácil de auditar y depurar
+--
+-- ESTRUCTURA:
+--   PASO 1: base          → una fila por numeroruc × periodo (tu query)
+--   PASO 2: lag1          → ventas del mes anterior (T-1)
+--   PASO 3: lag2          → ventas de hace 2 meses  (T-2)
+--   PASO 4: lag3          → ventas de hace 3 meses  (T-3)
+--   PASO 5: lag4/5        → ventas T-4 y T-5 (para MM6)
+--   PASO 6: mm3           → promedio de T, T-1, T-2
+--   PASO 7: mm6           → promedio de T, T-1, T-2, T-3, T-4, T-5
+--   PASO 8: max_min_3     → máximo y mínimo entre T, T-1, T-2
+--   PASO 9: max_min_6     → máximo y mínimo entre T..T-5
+--   PASO 10: ytd          → acumulado del año en curso hasta T
+--   PASO FINAL: join todo → una fila con todas las features
+-- ═══════════════════════════════════════════════════════════════
+--DROP TABLE disc_comercial.HM_FEATURES_IZIPAY_202504
+
+
+CREATE TABLE disc_comercial.HM_FEATURES_IZIPAY_202604
+WITH (
+    format              = 'Parquet',
+    parquet_compression = 'SNAPPY'
+) AS
+
+-- ── 
+WITH params AS (
+    SELECT 
+        202504 AS p_inicio, 
+        202604 AS p_fin,
+        -- Variables autocalculadas para la lógica de tiempo relativo
+        date_parse(CAST(202604 AS VARCHAR), '%Y%m') AS date_fin,
+        SUBSTR(CAST(202604 AS VARCHAR), 1, 4) AS anio_fin,
+        CAST(SUBSTR(CAST(202604 AS VARCHAR), 5, 2) AS DOUBLE) AS mes_fin_num
+),
+
+-- ── 2. LA MALLA (UNIVERSO TOTAL DE RUCS) ──
+universo AS (
+    SELECT
+        CASE WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END AS numeroruc,
+        MAX(giro) AS giro, MAX(dpto) AS dpto, MAX(mcc) AS mcc, MAX(en_izi) AS en_izi, MAX(en_ibk) AS en_ibk
+    FROM disc_comercial.kbr_izipay_universo_hash A
+    LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B ON A.key_value = B.key_value
+    WHERE A.key_value IS NOT NULL AND A.key_value <> ''
+    GROUP BY 1
+),
+
+-- ── 3. PRE-AGREGACIÓN MENSUAL E ÍNDICE DE TIEMPO RELATIVO ──
+-- Aquí transformamos el periodo en una variable "meses_atras" (0 = mes actual, 1 = lag1, etc.)
+base_mensual AS (
+    SELECT
+        CASE WHEN B.key_value_ruc_pn IS NOT NULL THEN B.key_value_ruc_pn ELSE A.key_value END AS numeroruc,
+        CAST(A.periodo AS VARCHAR) AS periodo_str,
+        p.anio_fin,
+        p.mes_fin_num,
+        p.p_fin,
+        -- Cálculo clave: Distancia en meses desde el periodo actual
+        date_diff('month', date_parse(CAST(A.periodo AS VARCHAR), '%Y%m'), p.date_fin) AS meses_atras,
+        
+        -- Montos base sumarizados por RUC y Mes
+        SUM(CASE WHEN UPPER(compania) = 'IZIPAY' THEN COALESCE(CAST(importe_total_izipay AS double), 0) ELSE 0 END) AS izi_monto,
+        SUM(COALESCE(CAST(importe_data_ibk AS double), 0)) AS ibk_total_monto,
+        SUM(COALESCE(CAST(importe_ibk_en_izipay AS double), 0)) AS ibk_en_izi,
+
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_monto,
+        COUNT(DISTINCT CASE WHEN UPPER(compania) <> 'IZIPAY' AND COALESCE(importe_data_ibk, 0) > 0 THEN compania END) AS ibk_noizi_n_adqui,
+        
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(tarjeta) = 'TC' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_tc,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(tarjeta) = 'TD' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_td,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(marca) = 'VISA' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_visa,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(marca) = 'MASTERCARD' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_mc,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(marca) = 'AMEX' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_amex,
+        SUM(CASE WHEN UPPER(compania) <> 'IZIPAY' AND UPPER(marca) = 'DINERS' THEN COALESCE(importe_data_ibk, 0) ELSE 0 END) AS ibk_noizi_diners,
+
+        SUM(CASE WHEN UPPER(tarjeta)='TC' AND UPPER(marca)='VISA' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS visa_tc,
+        SUM(CASE WHEN UPPER(tarjeta)='TD' AND UPPER(marca)='VISA' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS visa_td,
+        SUM(CASE WHEN UPPER(tarjeta)='TC' AND UPPER(marca)='MASTERCARD' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS mc_tc,
+        SUM(CASE WHEN UPPER(tarjeta)='TD' AND UPPER(marca)='MASTERCARD' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS mc_td,
+        SUM(CASE WHEN UPPER(marca)='AMEX' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS amex,
+        SUM(CASE WHEN UPPER(marca)='DINERS' THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS diners,
+        SUM(CASE WHEN UPPER(marca) NOT IN ('VISA','MASTERCARD','AMEX','DINERS') THEN COALESCE(importe_total_izipay,0) ELSE 0 END) AS otros
+
+    FROM disc_comercial.kbr_izipay_universo_hash A
+    LEFT JOIN e_perm_aws.V_MST_ENCRIP_DNI_RUC_PN_HIST B ON A.key_value = B.key_value
+    CROSS JOIN params p
+    WHERE A.key_value IS NOT NULL AND A.key_value <> ''
+      -- Escaneo exacto del periodo solicitado (Ej. 202412 a 202512)
+      AND CAST(A.periodo AS INTEGER) BETWEEN p.p_inicio AND p.p_fin
+    GROUP BY 1, 2, 3, 4, 5, 6
+),
+
+-- ── 4. PIVOTEO DINÁMICO (Sin fechas quemadas, solo variables lógicas) ──
+raw_metricas AS (
+    SELECT 
+        numeroruc,
+        MAX(mes_fin_num) AS mes_fin_num,
+        MAX(p_fin) AS p_fin,
+        MAX(CASE WHEN meses_atras = 0 THEN 1 ELSE 0 END) AS flag_obs_mes,
+
+        -- T-0 (Mes actual: meses_atras = 0)
+        SUM(CASE WHEN meses_atras = 0 THEN izi_monto ELSE 0 END) AS izi_monto_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_total_monto ELSE 0 END) AS ibk_monto_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_en_izi ELSE 0 END) AS ibk_en_izi_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_n_adqui ELSE 0 END) AS ibk_noizi_n_adqui_mes,
+        
+        SUM(CASE WHEN meses_atras = 0 THEN visa_tc ELSE 0 END) AS visa_tc,
+        SUM(CASE WHEN meses_atras = 0 THEN visa_td ELSE 0 END) AS visa_td,
+        SUM(CASE WHEN meses_atras = 0 THEN mc_tc ELSE 0 END) AS mc_tc,
+        SUM(CASE WHEN meses_atras = 0 THEN mc_td ELSE 0 END) AS mc_td,
+        SUM(CASE WHEN meses_atras = 0 THEN amex ELSE 0 END) AS amex,
+        SUM(CASE WHEN meses_atras = 0 THEN diners ELSE 0 END) AS diners,
+        SUM(CASE WHEN meses_atras = 0 THEN otros ELSE 0 END) AS otros,
+
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_tc ELSE 0 END) AS ibk_noizi_tc_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_td ELSE 0 END) AS ibk_noizi_td_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_visa ELSE 0 END) AS ibk_noizi_visa_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_mc ELSE 0 END) AS ibk_noizi_mc_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_amex ELSE 0 END) AS ibk_noizi_amex_mes,
+        SUM(CASE WHEN meses_atras = 0 THEN ibk_noizi_diners ELSE 0 END) AS ibk_noizi_diners_mes,
+
+        -- Lags (meses_atras = 1 o 2)
+        SUM(CASE WHEN meses_atras = 1 THEN izi_monto ELSE 0 END) AS izi_lag1,
+        SUM(CASE WHEN meses_atras = 1 THEN ibk_total_monto ELSE 0 END) AS ibk_lag1,
+        SUM(CASE WHEN meses_atras = 1 THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_lag1,
+        SUM(CASE WHEN meses_atras = 2 THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_lag2,
+
+        -- MM3 (De 0 a 2 meses atrás)
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN izi_monto ELSE 0 END) / 3.0 AS izi_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN ibk_total_monto ELSE 0 END) / 3.0 AS ibk_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN ibk_noizi_monto ELSE 0 END) / 3.0 AS ibk_noizi_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN visa_tc ELSE 0 END) / 3.0 AS visa_tc_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN visa_td ELSE 0 END) / 3.0 AS visa_td_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN mc_tc ELSE 0 END) / 3.0 AS mc_tc_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN mc_td ELSE 0 END) / 3.0 AS mc_td_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN amex ELSE 0 END) / 3.0 AS amex_mm3,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN diners ELSE 0 END) / 3.0 AS diners_mm3,
+
+        -- MM6 (De 0 a 5 meses atrás)
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN izi_monto ELSE 0 END) / 6.0 AS izi_mm6,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN ibk_total_monto ELSE 0 END) / 6.0 AS ibk_mm6,
+        SUM(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN ibk_noizi_monto ELSE 0 END) / 6.0 AS ibk_noizi_mm6,
+
+        -- MAX / MIN 3M
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN izi_monto ELSE 0 END) AS izi_max3,
+        MIN(CASE WHEN meses_atras BETWEEN 0 AND 2 AND izi_monto > 0 THEN izi_monto ELSE NULL END) AS izi_min3,
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN ibk_total_monto ELSE 0 END) AS ibk_max3,
+        MIN(CASE WHEN meses_atras BETWEEN 0 AND 2 AND ibk_total_monto > 0 THEN ibk_total_monto ELSE NULL END) AS ibk_min3,
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN amex ELSE 0 END) AS amex_max3,
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 2 THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_max3,
+        MIN(CASE WHEN meses_atras BETWEEN 0 AND 2 AND ibk_noizi_monto > 0 THEN ibk_noizi_monto ELSE NULL END) AS ibk_noizi_min3,
+
+        -- MAX / MIN 6M
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN izi_monto ELSE 0 END) AS izi_max6,
+        MIN(CASE WHEN meses_atras BETWEEN 0 AND 5 AND izi_monto > 0 THEN izi_monto ELSE NULL END) AS izi_min6,
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN ibk_total_monto ELSE 0 END) AS ibk_max6,
+        MIN(CASE WHEN meses_atras BETWEEN 0 AND 5 AND ibk_total_monto > 0 THEN ibk_total_monto ELSE NULL END) AS ibk_min6,
+        MAX(CASE WHEN meses_atras BETWEEN 0 AND 5 THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_max6,
+
+        -- YTD (Mismo año que la fecha objetivo)
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN izi_monto ELSE 0 END) AS izi_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin AND izi_monto > 0 THEN 1 ELSE 0 END) AS meses_activos_anio,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN ibk_total_monto ELSE 0 END) AS ibk_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN visa_tc ELSE 0 END) AS visa_tc_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN visa_td ELSE 0 END) AS visa_td_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN mc_tc ELSE 0 END) AS mc_tc_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN mc_td ELSE 0 END) AS mc_td_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN amex ELSE 0 END) AS amex_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN diners ELSE 0 END) AS diners_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN ibk_noizi_monto ELSE 0 END) AS ibk_noizi_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN ibk_noizi_tc ELSE 0 END) AS ibk_noizi_tc_ytd,
+        SUM(CASE WHEN SUBSTR(periodo_str, 1, 4) = anio_fin THEN ibk_noizi_td ELSE 0 END) AS ibk_noizi_td_ytd
+
+    FROM base_mensual
+    GROUP BY numeroruc
+),
+
+-- ── 5. PANEL BALANCEADO (Cruce Universo x Data Activa) ──
+panel_balanceado AS (
+    SELECT
+        u.numeroruc, u.giro, u.dpto, u.mcc, u.en_izi, u.en_ibk,
+        m.mes_fin_num, m.p_fin,
+
+        COALESCE(m.flag_obs_mes, 0) AS flag_obs_mes,
+        COALESCE(m.izi_monto_mes, 0) AS izi_monto_mes,
+        COALESCE(m.ibk_monto_mes, 0) AS ibk_monto_mes,
+        COALESCE(m.ibk_en_izi_mes, 0) AS ibk_en_izi_mes,
+        COALESCE(m.ibk_noizi_mes, 0) AS ibk_noizi_mes,
+        COALESCE(m.ibk_noizi_n_adqui_mes, 0) AS ibk_noizi_n_adqui_mes,
+        COALESCE(m.ibk_noizi_tc_mes, 0) AS ibk_noizi_tc_mes,
+        COALESCE(m.ibk_noizi_td_mes, 0) AS ibk_noizi_td_mes,
+        COALESCE(m.ibk_noizi_visa_mes, 0) AS ibk_noizi_visa_mes,
+        COALESCE(m.ibk_noizi_mc_mes, 0) AS ibk_noizi_mc_mes,
+        COALESCE(m.ibk_noizi_amex_mes, 0) AS ibk_noizi_amex_mes,
+        COALESCE(m.ibk_noizi_diners_mes, 0) AS ibk_noizi_diners_mes,
+        
+        COALESCE(m.visa_tc, 0) AS visa_tc, COALESCE(m.visa_td, 0) AS visa_td,
+        COALESCE(m.mc_tc, 0) AS mc_tc, COALESCE(m.mc_td, 0) AS mc_td,
+        COALESCE(m.amex, 0) AS amex, COALESCE(m.diners, 0) AS diners, COALESCE(m.otros, 0) AS otros,
+
+        COALESCE(m.izi_lag1, 0) AS izi_lag1,
+        COALESCE(m.ibk_lag1, 0) AS ibk_lag1,
+        COALESCE(m.ibk_noizi_lag1, 0) AS ibk_noizi_lag1,
+        COALESCE(m.ibk_noizi_lag2, 0) AS ibk_noizi_lag2,
+
+        COALESCE(m.izi_mm3, 0) AS izi_mm3, COALESCE(m.ibk_mm3, 0) AS ibk_mm3, COALESCE(m.ibk_noizi_mm3, 0) AS ibk_noizi_mm3,
+        COALESCE(m.visa_tc_mm3, 0) AS visa_tc_mm3, COALESCE(m.visa_td_mm3, 0) AS visa_td_mm3,
+        COALESCE(m.mc_tc_mm3, 0) AS mc_tc_mm3, COALESCE(m.mc_td_mm3, 0) AS mc_td_mm3,
+        COALESCE(m.amex_mm3, 0) AS amex_mm3, COALESCE(m.diners_mm3, 0) AS diners_mm3,
+
+        COALESCE(m.izi_mm6, 0) AS izi_mm6, COALESCE(m.ibk_mm6, 0) AS ibk_mm6, COALESCE(m.ibk_noizi_mm6, 0) AS ibk_noizi_mm6,
+
+        COALESCE(m.izi_max3, 0) AS izi_max3, COALESCE(m.izi_min3, 0) AS izi_min3,
+        COALESCE(m.ibk_max3, 0) AS ibk_max3, COALESCE(m.ibk_min3, 0) AS ibk_min3,
+        COALESCE(m.amex_max3, 0) AS amex_max3, COALESCE(m.ibk_noizi_max3, 0) AS ibk_noizi_max3, COALESCE(m.ibk_noizi_min3, 0) AS ibk_noizi_min3,
+
+        COALESCE(m.izi_max6, 0) AS izi_max6, COALESCE(m.izi_min6, 0) AS izi_min6,
+        COALESCE(m.ibk_max6, 0) AS ibk_max6, COALESCE(m.ibk_min6, 0) AS ibk_min6,
+        COALESCE(m.ibk_noizi_max6, 0) AS ibk_noizi_max6,
+
+        COALESCE(m.izi_ytd, 0) AS izi_ytd, COALESCE(m.meses_activos_anio, 0) AS meses_activos_anio,
+        COALESCE(m.ibk_ytd, 0) AS ibk_ytd,
+        COALESCE(m.visa_tc_ytd, 0) AS visa_tc_ytd, COALESCE(m.visa_td_ytd, 0) AS visa_td_ytd,
+        COALESCE(m.mc_tc_ytd, 0) AS mc_tc_ytd, COALESCE(m.mc_td_ytd, 0) AS mc_td_ytd,
+        COALESCE(m.amex_ytd, 0) AS amex_ytd, COALESCE(m.diners_ytd, 0) AS diners_ytd,
+        COALESCE(m.ibk_noizi_ytd, 0) AS ibk_noizi_ytd,
+        COALESCE(m.ibk_noizi_tc_ytd, 0) AS ibk_noizi_tc_ytd, COALESCE(m.ibk_noizi_td_ytd, 0) AS ibk_noizi_td_ytd
+
+    FROM universo u
+    LEFT JOIN raw_metricas m ON u.numeroruc = m.numeroruc
+)
+
+-- ── 6. CÁLCULOS DERIVADOS Y MATEMÁTICA FINAL ──
+SELECT
+    numeroruc, giro, dpto, mcc, en_izi, en_ibk,
+
+    izi_monto_mes, ibk_monto_mes, izi_lag1, ibk_lag1,
+    izi_monto_mes - izi_lag1 AS izi_var1, ibk_monto_mes - ibk_lag1 AS ibk_var1,
+    izi_monto_mes / NULLIF(izi_lag1, 0) AS izi_ratio1, ibk_monto_mes / NULLIF(ibk_lag1, 0) AS ibk_ratio1,
+
+    izi_mm3, izi_mm6, ibk_mm3, ibk_mm6,
+    visa_tc_mm3, visa_td_mm3, mc_tc_mm3, mc_td_mm3, amex_mm3, diners_mm3,
+    izi_mm3 / NULLIF(izi_mm6, 0) AS izi_ratio_mm3_mm6,
+
+    izi_max3, izi_min3, izi_max6, izi_min6, ibk_max3, ibk_min3, ibk_max6, ibk_min6, amex_max3,
+    izi_max3 - izi_min3 AS izi_rango3, izi_max6 - izi_min6 AS izi_rango6,
+
+    izi_ytd, ibk_ytd, visa_tc_ytd, visa_td_ytd, mc_tc_ytd, mc_td_ytd, amex_ytd, diners_ytd, meses_activos_anio,
+
+    visa_tc, visa_td, mc_tc, mc_td, amex, diners, otros,
+    visa_tc / NULLIF(izi_monto_mes, 0) AS visa_tc_share, visa_td / NULLIF(izi_monto_mes, 0) AS visa_td_share,
+    mc_tc / NULLIF(izi_monto_mes, 0) AS mc_tc_share, mc_td / NULLIF(izi_monto_mes, 0) AS mc_td_share,
+    amex / NULLIF(izi_monto_mes, 0) AS amex_share, diners / NULLIF(izi_monto_mes, 0) AS diners_share,
+    (visa_tc + mc_tc + amex + diners) / NULLIF(izi_monto_mes, 0) AS share_tc_total,
+
+    (CASE WHEN visa_tc + visa_td > 0 THEN 1 ELSE 0 END + CASE WHEN mc_tc + mc_td > 0 THEN 1 ELSE 0 END +
+     CASE WHEN amex > 0 THEN 1 ELSE 0 END + CASE WHEN diners > 0 THEN 1 ELSE 0 END) AS n_marcas_activas,
+    amex / NULLIF(visa_tc + visa_td, 0) AS ratio_amex_visa,
+
+    LN(1 + izi_monto_mes) AS izi_log_mes, LN(1 + izi_mm3) AS izi_log_mm3, LN(1 + ibk_monto_mes) AS ibk_log_mes,
+
+    ibk_noizi_mes, ibk_noizi_n_adqui_mes,
+    ibk_monto_mes AS ibk_total_mes, ibk_en_izi_mes / NULLIF(ibk_monto_mes, 0) AS ibk_share_en_izi_mes,
+    ibk_noizi_tc_mes, ibk_noizi_td_mes, ibk_noizi_visa_mes, ibk_noizi_mc_mes, ibk_noizi_amex_mes, ibk_noizi_diners_mes,
+
+    ibk_noizi_visa_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_visa_share, ibk_noizi_mc_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_mc_share,
+    ibk_noizi_amex_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_amex_share, ibk_noizi_diners_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_diners_share,
+    ibk_noizi_tc_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_share_tc, ibk_noizi_td_mes / NULLIF(ibk_noizi_mes, 0) AS ibk_noizi_share_td,
+
+    ibk_noizi_lag1, ibk_lag1 AS ibk_total_lag1,
+    ibk_noizi_mes - ibk_noizi_lag1 AS ibk_noizi_var1, ibk_noizi_mes / NULLIF(ibk_noizi_lag1, 0) AS ibk_noizi_ratio1,
+
+    ibk_noizi_mm3, ibk_noizi_mm6, ibk_mm3 AS ibk_total_mm3, ibk_mm6 AS ibk_total_mm6,
+    ibk_noizi_mm3 / NULLIF(ibk_noizi_mm6, 0) AS ibk_noizi_ratio_mm3_mm6,
+    ibk_noizi_max3, ibk_noizi_min3, ibk_noizi_max6, ibk_noizi_max3 - ibk_noizi_min3 AS ibk_noizi_rango3,
+
+    ibk_noizi_ytd, ibk_noizi_tc_ytd, ibk_noizi_td_ytd, ibk_ytd AS ibk_total_ytd,
+    LN(1 + ibk_noizi_mes) AS ibk_noizi_log_mes, LN(1 + ibk_noizi_mm3) AS ibk_noizi_log_mm3,
+    ibk_noizi_mes / NULLIF(ibk_monto_mes, 0) AS ibk_noizi_share_mes, izi_monto_mes / NULLIF(ibk_noizi_mes, 0) AS ratio_izi_vs_noizi,
+
+    CASE WHEN ibk_noizi_mes > 0 THEN 1 ELSE 0 END AS flag_ibk_noizi_activo,
+    CASE WHEN ibk_noizi_mes > izi_monto_mes THEN 1 ELSE 0 END AS flag_competencia_supera,
+    CASE WHEN izi_monto_mes > 0 THEN 1 ELSE 0 END AS flag_activo_mes,
+    CASE WHEN izi_monto_mes >= 5000 THEN 1 ELSE 0 END AS flag_sobre_5k,
+    CASE WHEN izi_monto_mes >= 8000 THEN 1 ELSE 0 END AS flag_sobre_8k,
+    CASE WHEN izi_monto_mes > izi_lag1 THEN 1 ELSE 0 END AS flag_creciendo,
+    CASE WHEN izi_mm3 > izi_mm6 THEN 1 ELSE 0 END AS flag_acelerando,
+    CASE WHEN (CASE WHEN visa_tc + visa_td > 0 THEN 1 ELSE 0 END + CASE WHEN mc_tc + mc_td > 0 THEN 1 ELSE 0 END +
+               CASE WHEN amex > 0 THEN 1 ELSE 0 END + CASE WHEN diners > 0 THEN 1 ELSE 0 END) > 1 THEN 1 ELSE 0 END AS flag_multi_marca,
+
+    flag_obs_mes,
+    
+    -- El denominador "mes_fin_num" se hereda automáticamente (ej. 12 para Diciembre, 4 para Abril)
+    CAST(meses_activos_anio AS DOUBLE) / NULLIF(CASE WHEN izi_ytd > 0 THEN COALESCE(mes_fin_num, 12.0) ELSE 0.0 END, 0) AS tasa_actividad_anio,
+    
+    ibk_en_izi_mes / NULLIF(ibk_monto_mes, 0) AS sow_izipay_mes,
+    ibk_monto_mes - ibk_en_izi_mes AS brecha_captura_mes,
+    ibk_noizi_mm3 / NULLIF(ibk_mm3, 0) AS competencia_share_mm3,
+    (ibk_noizi_mes - ibk_noizi_lag1) - (ibk_noizi_lag1 - ibk_noizi_lag2) AS ibk_noizi_aceleracion,
+    (izi_max6 - izi_min6) / NULLIF(izi_mm6, 0) AS izi_cv6m,
+    izi_monto_mes / NULLIF(izi_mm6, 0) AS izi_vs_mm6,
+    1 - (izi_monto_mes / NULLIF(izi_max6, 0)) AS izi_drawdown6,
+
+    CASE WHEN ibk_noizi_mes > 5000 AND (ibk_en_izi_mes / NULLIF(ibk_monto_mes, 0)) < 0.3 THEN 1 ELSE 0 END AS flag_oportunidad_alta,
+    CASE WHEN izi_monto_mes = 0 AND ibk_noizi_mes > 0 THEN 1 ELSE 0 END AS flag_solo_competencia,
+
+    -- Retorna el string final del periodo que corriste (ej. '202512')
+    CAST(p_fin AS VARCHAR) AS codmes
+
+FROM panel_balanceado;
+
+--#######################################################################################################################################
+--   UNIR BASE HISTORICA DE SALDOS
+--#######################################################################################################################################
+DROP TABLE IF EXISTS disc_comercial.HM_FEATURES_IZI_UNIVERSO;
+
+CREATE TABLE disc_comercial.HM_FEATURES_IZI_UNIVERSO
+WITH ( 
+    format = 'Parquet', 
+    parquet_compression = 'SNAPPY'
+)
+AS (
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202412
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202501
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202502
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202503
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202504
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202505
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202506
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202507
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202508
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202509
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202510
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202511
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202512
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202601  
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202602
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202603
+UNION ALL
+SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202604
+);
+
+
+--SELECT * FROM  disc_comercial.kbr_izipay_universo_hash WHERE key_value = '40BBD6B2F0AE5EF83F2FBC455921DF1D52DBF59CDC1959EAF6B2BC6AD859E9F3'
+--SELECT * FROM  disc_comercial.HM_FEATURES_IZI_UNIVERSO WHERE numeroruc  = '40BBD6B2F0AE5EF83F2FBC455921DF1D52DBF59CDC1959EAF6B2BC6AD859E9F3'
+--SELECT * FROM  disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET  WHERE y_afil_2de3_5k = 1 numeroruc  = '7D0504F75D54F2A1F02DE3982BCC46222D21DF8678D5F2FED6A1CB76CE9ABFA2'
+--SELECT * FROM  disc_comercial.HM_UNIVERSO_PXC_IZIPAY_TARGET  WHERE numeroruc  = '40BBD6B2F0AE5EF83F2FBC455921DF1D52DBF59CDC1959EAF6B2BC6AD859E9F3'
+--SELECT * FROM disc_comercial.HM_FEATURES_IZIPAY_202412 LIMIT 100
+
+SELECT COUNT(*) CNT, COUNT(DISTINCT numeroruc) CNT_R FROM disc_comercial.HM_FEATURES_IZIPAY_202412 LIMIT 100
+SELECT COUNT(*) CNT, COUNT(DISTINCT numeroruc) CNT_R FROM disc_comercial.HM_FEATURES_IZIPAY_202501 LIMIT 100
