@@ -1,0 +1,745 @@
+-- ═══════════════════════════════════════════════════════════════
+-- FEATURES POS IBK — PANEL COMPLETO
+-- Granularidad: num_ruc × periodo_val
+-- Fuente: e_perm_aws.t_agg_mes_vpc_transacc_sav_imp
+-- Filtro: grupo_final_vpc_n3 = 'POS'
+--
+-- VARIABLES POR MÉTRICA (monto, trxs, ticket):
+--   Snapshot mes actual
+--   LAG 1 mes anterior
+--   Variación absoluta y ratio vs mes anterior
+--   MM3  — media móvil 3 meses
+--   MM6  — media móvil 6 meses
+--   MAX3 — máximo últimos 3 meses
+--   MAX6 — máximo últimos 6 meses
+--   MIN3 — mínimo últimos 3 meses
+--   MIN6 — mínimo últimos 6 meses
+--   YTD  — acumulado año en curso
+--   Acumulado histórico (desde inicio de ventana)
+--   Estacionalidad, tendencia, coef. variación
+-- Por marca: VISA / AMEX / DINERS
+-- Diversificación, flags, log-transforms
+-- ═══════════════════════════════════════════════════════════════
+
+--##############################################################################################################################
+--              ANALIZAR DATOS DE SALDOS IBK CON PANEL BALANCEADO
+--##############################################################################################################################
+--DROP TABLE IF EXISTS disc_comercial.HM_TRANSACCIONES_POS_VPC;
+
+CREATE TABLE disc_comercial.HM_TRANSACCIONES_POS_VPC
+WITH ( 
+    format = 'Parquet', 
+    parquet_compression = 'SNAPPY', 
+    partitioned_by = ARRAY['periodo']
+)
+AS (
+
+WITH params AS (
+    SELECT
+        202401 AS periodo_inicio,
+        202605 AS periodo_fin
+),
+
+-- ── PASO 0: MALLA DE PERIODOS (todos los meses del rango, sin huecos)
+-- Genera 202401, 202402, ... 202604 como lista de enteros YYYYMM.
+-- Esto define el eje temporal completo del panel.
+periodos AS (
+    SELECT periodo_val
+    FROM (
+        SELECT (anio*100 + mes) AS periodo_val
+        FROM (SELECT anio FROM UNNEST(SEQUENCE(2024, 2026)) AS t(anio)) a
+        CROSS JOIN (SELECT mes FROM UNNEST(SEQUENCE(1, 12)) AS t(mes)) m
+    ) g
+    CROSS JOIN params p
+    WHERE g.periodo_val BETWEEN p.periodo_inicio AND p.periodo_fin
+),
+
+-- ── PASO 1: CUC → RUC por periodo
+cuc_ruc AS (
+    SELECT periodo_val, num_ruc_val, cuc_num
+    FROM e_perm_aws.T_VPC_CLIENTE_BANCA_FINAL_HST
+    CROSS JOIN params
+    WHERE fecha_dt IN (
+        SELECT MAX(fecha_dt)
+        FROM e_perm_aws.T_VPC_CLIENTE_BANCA_FINAL_HST
+        CROSS JOIN params p2
+        WHERE CAST(YEAR(fecha_dt)*100 + MONTH(fecha_dt) AS INTEGER)
+              BETWEEN p2.periodo_inicio AND p2.periodo_fin
+        GROUP BY CAST(YEAR(fecha_dt)*100 + MONTH(fecha_dt) AS INTEGER)
+    )
+    AND COALESCE(num_ruc_val,'.') NOT LIKE '.'
+    AND COALESCE(num_ruc_val,'.') NOT LIKE ''
+),
+
+-- ── PASO 1B: UNIVERSO DE RUCs
+-- Todos los RUC distintos que aparecen en POS dentro del rango.
+-- Cada RUC debe existir en TODOS los periodos del panel,
+-- tenga o no transacción ese mes.
+universo_ruc AS (
+    SELECT DISTINCT r.num_ruc_val
+    FROM e_perm_aws.t_agg_mes_vpc_transacc_sav_imp t
+    INNER JOIN cuc_ruc r
+        ON  t.cuc_num_val = r.cuc_num
+        AND t.periodo_val = r.periodo_val
+    CROSS JOIN params p
+    WHERE t.grupo_final_vpc_n3 = 'POS'
+      AND t.periodo_val BETWEEN p.periodo_inicio AND p.periodo_fin
+      AND r.num_ruc_val IS NOT NULL
+),
+
+-- ── PASO 1C: MALLA COMPLETA RUC × PERIODO
+-- Producto cartesiano: cada RUC en cada periodo del rango.
+-- Esta es la columna vertebral del panel balanceado.
+malla AS (
+    SELECT u.num_ruc_val, pe.periodo_val
+    FROM universo_ruc u
+    CROSS JOIN periodos pe
+),
+
+-- ── PASO 2: Base POS con RUC (solo meses CON transacción)
+pos_base AS (
+    SELECT
+        t.periodo_val,
+        r.num_ruc_val,
+        t.grupo_vpc_desc                 AS marca,
+        t.cant_transacc,
+        t.montotransaccion_solar_amt     AS monto
+    FROM e_perm_aws.t_agg_mes_vpc_transacc_sav_imp t
+    INNER JOIN cuc_ruc r
+        ON  t.cuc_num_val = r.cuc_num
+        AND t.periodo_val = r.periodo_val
+    CROSS JOIN params p
+    WHERE t.grupo_final_vpc_n3  = 'POS'
+      AND t.periodo_val BETWEEN p.periodo_inicio AND p.periodo_fin
+      AND r.num_ruc_val IS NOT NULL
+),
+
+-- ── PASO 3A: Agregación por RUC × periodo (solo meses con dato)
+pos_agg AS (
+    SELECT
+        periodo_val,
+        num_ruc_val,
+        SUM(monto)                                                        AS tot_monto,
+        SUM(cant_transacc)                                                AS tot_trxs,
+        SUM(monto) / NULLIF(SUM(cant_transacc), 0)                       AS tot_ticket,
+        COUNT(DISTINCT marca)                                             AS tot_n_marcas,
+        SUM(CASE WHEN marca='VISA' THEN monto         ELSE 0 END)        AS visa_monto,
+        SUM(CASE WHEN marca='VISA' THEN cant_transacc  ELSE 0 END)       AS visa_trxs,
+        SUM(CASE WHEN marca='VISA' THEN monto         ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN marca='VISA' THEN cant_transacc ELSE 0 END),0) AS visa_ticket,
+        MAX(CASE WHEN marca='VISA'   THEN 1 ELSE 0 END)                  AS visa_activo,
+        SUM(CASE WHEN marca='AMEX' THEN monto         ELSE 0 END)        AS amex_monto,
+        SUM(CASE WHEN marca='AMEX' THEN cant_transacc  ELSE 0 END)       AS amex_trxs,
+        SUM(CASE WHEN marca='AMEX' THEN monto         ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN marca='AMEX' THEN cant_transacc ELSE 0 END),0) AS amex_ticket,
+        MAX(CASE WHEN marca='AMEX'   THEN 1 ELSE 0 END)                  AS amex_activo,
+        SUM(CASE WHEN marca='DINERS' THEN monto        ELSE 0 END)       AS diners_monto,
+        SUM(CASE WHEN marca='DINERS' THEN cant_transacc ELSE 0 END)      AS diners_trxs,
+        SUM(CASE WHEN marca='DINERS' THEN monto        ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN marca='DINERS' THEN cant_transacc ELSE 0 END),0) AS diners_ticket,
+        MAX(CASE WHEN marca='DINERS' THEN 1 ELSE 0 END)                  AS diners_activo
+    FROM pos_base
+    GROUP BY periodo_val, num_ruc_val
+),
+
+-- ── PASO 3B: PIVOT BALANCEADO
+-- LEFT JOIN malla → pos_agg. Donde no hubo transacción,
+-- COALESCE rellena 0. Así TODOS los RUC aparecen en TODOS
+-- los periodos del rango, con 0 en los meses sin actividad.
+-- flag_activo_mes distingue mes real con venta (1) de relleno (0).
+pos_pivot AS (
+    SELECT
+        m.periodo_val,
+        m.num_ruc_val,
+        m.periodo_val AS periodo,
+        CAST(SUBSTR(CAST(m.periodo_val AS VARCHAR), 1, 4) AS INTEGER) AS anio,
+        -- TOTALES (0 cuando el mes no tuvo transacción)
+        COALESCE(a.tot_monto,   0)                                       AS tot_monto,
+        COALESCE(a.tot_trxs,    0)                                       AS tot_trxs,
+        a.tot_ticket                                                     AS tot_ticket,
+        COALESCE(a.tot_n_marcas,0)                                       AS tot_n_marcas,
+        -- VISA
+        COALESCE(a.visa_monto,  0)                                       AS visa_monto,
+        COALESCE(a.visa_trxs,   0)                                       AS visa_trxs,
+        a.visa_ticket                                                    AS visa_ticket,
+        COALESCE(a.visa_activo, 0)                                       AS visa_activo,
+        -- AMEX
+        COALESCE(a.amex_monto,  0)                                       AS amex_monto,
+        COALESCE(a.amex_trxs,   0)                                       AS amex_trxs,
+        a.amex_ticket                                                    AS amex_ticket,
+        COALESCE(a.amex_activo, 0)                                       AS amex_activo,
+        -- DINERS
+        COALESCE(a.diners_monto,  0)                                     AS diners_monto,
+        COALESCE(a.diners_trxs,   0)                                     AS diners_trxs,
+        a.diners_ticket                                                  AS diners_ticket,
+        COALESCE(a.diners_activo, 0)                                     AS diners_activo,
+        -- Flag: 1 si el mes tuvo transacción real, 0 si es relleno del panel
+        CASE WHEN a.num_ruc_val IS NOT NULL THEN 1 ELSE 0 END            AS flag_activo_mes
+    FROM malla m
+    LEFT JOIN pos_agg a
+        ON  m.num_ruc_val = a.num_ruc_val
+        AND m.periodo_val = a.periodo_val
+),
+
+-- ── PASO 4: Panel con todas las ventanas por funciones de ventana
+pos_panel AS (
+    SELECT
+        periodo_val,
+        num_ruc_val,
+        periodo,
+        anio,
+
+        -- Flag de actividad real del mes (0 = relleno del panel)
+        flag_activo_mes,
+        -- Meses con venta real en ventana 3m / 6m (sobre flag, no sobre filas)
+        SUM(flag_activo_mes) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS meses_activos_3m,
+        SUM(flag_activo_mes) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS meses_activos_6m,
+
+        -- ════════════════════════════════════════════════════════
+        -- SECCIÓN A — TOTALES
+        -- ════════════════════════════════════════════════════════
+
+        -- A1. Snapshot mes actual
+        tot_monto                                                         AS tot_monto_mes,
+        tot_trxs                                                          AS tot_trxs_mes,
+        tot_ticket                                                        AS tot_ticket_mes,
+        tot_n_marcas                                                      AS tot_n_marcas_mes,
+
+        -- A2. LAG 1 — mes anterior
+        LAG(tot_monto, 1) OVER w_ruc                                     AS tot_monto_lag1,
+        LAG(tot_trxs,  1) OVER w_ruc                                     AS tot_trxs_lag1,
+        LAG(tot_ticket,1) OVER w_ruc                                     AS tot_ticket_lag1,
+
+        -- A3. Variación vs mes anterior
+        tot_monto - LAG(tot_monto,1) OVER w_ruc                          AS tot_monto_var1,
+        tot_trxs  - LAG(tot_trxs, 1) OVER w_ruc                         AS tot_trxs_var1,
+        tot_monto / NULLIF(LAG(tot_monto,1) OVER w_ruc, 0)              AS tot_monto_ratio1,
+
+        -- A4. MM3 — media móvil 3 meses
+        AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_monto_mm3,
+        AVG(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_trxs_mm3,
+        AVG(tot_ticket) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_ticket_mm3,
+
+        -- A5. MM6 — media móvil 6 meses
+        AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_monto_mm6,
+        AVG(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_trxs_mm6,
+        AVG(tot_ticket) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_ticket_mm6,
+
+        -- A6. MAX últimos 3 meses
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_monto_max3,
+        MAX(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_trxs_max3,
+
+        -- A7. MAX últimos 6 meses
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_monto_max6,
+        MAX(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_trxs_max6,
+
+        -- A8. MIN últimos 3 meses
+        MIN(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_monto_min3,
+        MIN(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_trxs_min3,
+
+        -- A9. MIN últimos 6 meses
+        MIN(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_monto_min6,
+        MIN(tot_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_trxs_min6,
+
+        -- A10. Rango de volatilidad (max - min) en 3m y 6m
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) -
+        MIN(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS tot_monto_rango3,
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) -
+        MIN(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS tot_monto_rango6,
+
+        -- A11. Ratio max3/mm3 — pico vs promedio (estacionalidad corta)
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 0)                AS tot_ratio_max_mm3,
+
+        -- A12. Tendencia MM3 vs MM6 (si MM3 > MM6 → acelerando)
+        AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW), 0)                AS tot_ratio_mm3_mm6,
+
+        -- A13. YTD — acumulado del año en curso hasta el mes actual
+        SUM(tot_monto) OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_monto_ytd,
+        SUM(tot_trxs)  OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_trxs_ytd,
+        COUNT(*)       OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_meses_ytd,
+
+        -- A14. Acumulado histórico completo
+        SUM(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_monto_acum,
+        COUNT(*)       OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_meses_acum,
+        MAX(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_monto_max_hist,
+        MIN(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_monto_min_hist,
+        AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS tot_monto_prom_hist,
+
+        -- A15. Log-transforms
+        LN(1 + tot_monto)                                                AS tot_log_monto_mes,
+        LN(1 + AVG(tot_monto) OVER (PARTITION BY num_ruc_val
+            ORDER BY periodo_val ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS tot_log_monto_mm3,
+        LN(1 + AVG(tot_monto) OVER (PARTITION BY num_ruc_val
+            ORDER BY periodo_val ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)) AS tot_log_monto_mm6,
+
+        -- ════════════════════════════════════════════════════════
+        -- SECCIÓN B — VISA
+        -- ════════════════════════════════════════════════════════
+
+        -- B1. Snapshot
+        visa_monto                                                        AS visa_monto_mes,
+        visa_trxs                                                         AS visa_trxs_mes,
+        visa_ticket                                                       AS visa_ticket_mes,
+        visa_activo                                                       AS visa_activo_mes,
+
+        -- B2. LAG 1
+        LAG(visa_monto,1) OVER w_ruc                                     AS visa_monto_lag1,
+        visa_monto - LAG(visa_monto,1) OVER w_ruc                        AS visa_monto_var1,
+        visa_monto / NULLIF(LAG(visa_monto,1) OVER w_ruc, 0)            AS visa_monto_ratio1,
+
+        -- B3. MM3
+        AVG(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS visa_monto_mm3,
+        AVG(visa_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS visa_trxs_mm3,
+
+        -- B4. MM6
+        AVG(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS visa_monto_mm6,
+        AVG(visa_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS visa_trxs_mm6,
+
+        -- B5. MAX3, MAX6, MIN3, MIN6
+        MAX(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS visa_monto_max3,
+        MAX(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS visa_monto_max6,
+        MIN(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS visa_monto_min3,
+        MIN(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS visa_monto_min6,
+
+        -- B6. Tendencia MM3 vs MM6
+        AVG(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW), 0)                AS visa_ratio_mm3_mm6,
+
+        -- B7. Share sobre total del mes
+        visa_monto / NULLIF(tot_monto, 0)                                AS visa_share_mes,
+        AVG(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 0)                AS visa_share_mm3,
+
+        -- B8. YTD y acumulados
+        SUM(visa_monto) OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS visa_monto_ytd,
+        MAX(visa_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS visa_monto_max_hist,
+        SUM(visa_activo) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS visa_meses_acum,
+
+        LN(1 + visa_monto)                                               AS visa_log_monto_mes,
+        LN(1 + AVG(visa_monto) OVER (PARTITION BY num_ruc_val
+            ORDER BY periodo_val ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS visa_log_monto_mm3,
+
+        -- ════════════════════════════════════════════════════════
+        -- SECCIÓN C — AMEX
+        -- ════════════════════════════════════════════════════════
+
+        amex_monto                                                        AS amex_monto_mes,
+        amex_trxs                                                         AS amex_trxs_mes,
+        amex_ticket                                                       AS amex_ticket_mes,
+        amex_activo                                                       AS amex_activo_mes,
+
+        LAG(amex_monto,1) OVER w_ruc                                     AS amex_monto_lag1,
+        amex_monto - LAG(amex_monto,1) OVER w_ruc                        AS amex_monto_var1,
+        amex_monto / NULLIF(LAG(amex_monto,1) OVER w_ruc, 0)            AS amex_monto_ratio1,
+
+        AVG(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS amex_monto_mm3,
+        AVG(amex_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS amex_trxs_mm3,
+
+        AVG(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS amex_monto_mm6,
+        AVG(amex_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS amex_trxs_mm6,
+
+        MAX(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS amex_monto_max3,
+        MAX(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS amex_monto_max6,
+        MIN(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS amex_monto_min3,
+        MIN(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS amex_monto_min6,
+
+        AVG(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW), 0)                AS amex_ratio_mm3_mm6,
+
+        amex_monto / NULLIF(tot_monto, 0)                                AS amex_share_mes,
+        AVG(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 0)                AS amex_share_mm3,
+
+        SUM(amex_monto) OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS amex_monto_ytd,
+        MAX(amex_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS amex_monto_max_hist,
+        SUM(amex_activo) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS amex_meses_acum,
+
+        LN(1 + amex_monto)                                               AS amex_log_monto_mes,
+        LN(1 + AVG(amex_monto) OVER (PARTITION BY num_ruc_val
+            ORDER BY periodo_val ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS amex_log_monto_mm3,
+
+        -- ════════════════════════════════════════════════════════
+        -- SECCIÓN D — DINERS
+        -- ════════════════════════════════════════════════════════
+
+        diners_monto                                                      AS diners_monto_mes,
+        diners_trxs                                                       AS diners_trxs_mes,
+        diners_ticket                                                     AS diners_ticket_mes,
+        diners_activo                                                     AS diners_activo_mes,
+
+        LAG(diners_monto,1) OVER w_ruc                                   AS diners_monto_lag1,
+        diners_monto - LAG(diners_monto,1) OVER w_ruc                    AS diners_monto_var1,
+        diners_monto / NULLIF(LAG(diners_monto,1) OVER w_ruc, 0)        AS diners_monto_ratio1,
+
+        AVG(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS diners_monto_mm3,
+        AVG(diners_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS diners_trxs_mm3,
+
+        AVG(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS diners_monto_mm6,
+        AVG(diners_trxs)  OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS diners_trxs_mm6,
+
+        MAX(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS diners_monto_max3,
+        MAX(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS diners_monto_max6,
+        MIN(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)                    AS diners_monto_min3,
+        MIN(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)                    AS diners_monto_min6,
+
+        AVG(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW), 0)                AS diners_ratio_mm3_mm6,
+
+        diners_monto / NULLIF(tot_monto, 0)                              AS diners_share_mes,
+        AVG(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 0)                AS diners_share_mm3,
+
+        SUM(diners_monto) OVER (PARTITION BY num_ruc_val, anio
+            ORDER BY periodo_val ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS diners_monto_ytd,
+        MAX(diners_monto) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS diners_monto_max_hist,
+        SUM(diners_activo) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            AS diners_meses_acum,
+
+        LN(1 + diners_monto)                                             AS diners_log_monto_mes,
+        LN(1 + AVG(diners_monto) OVER (PARTITION BY num_ruc_val
+            ORDER BY periodo_val ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS diners_log_monto_mm3
+
+    FROM pos_pivot
+    WINDOW w_ruc AS (PARTITION BY num_ruc_val ORDER BY periodo_val)
+),
+
+-- ── PASO 5: Variables derivadas adicionales
+pos_final AS (
+    SELECT
+        periodo_val,
+        num_ruc_val,
+        flag_activo_mes AS flag_activo_mes_pos,
+        meses_activos_3m AS meses_activos_3m_pos,
+        meses_activos_6m AS meses_activos_6m_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN A — TOTALES
+        -- ════════════════════════════════════════════════
+        tot_monto_mes AS tot_monto_mes_pos,
+        tot_trxs_mes AS tot_trxs_mes_pos,
+        tot_ticket_mes AS tot_ticket_mes_pos,
+        tot_n_marcas_mes AS tot_n_marcas_mes_pos,
+        tot_monto_lag1 AS tot_monto_lag1_pos,
+        tot_trxs_lag1 AS tot_trxs_lag1_pos,
+        tot_ticket_lag1 AS tot_ticket_lag1_pos,
+        tot_monto_var1 AS tot_monto_var1_pos,
+        tot_trxs_var1 AS tot_trxs_var1_pos,
+        tot_monto_ratio1 AS tot_monto_ratio1_pos,
+        -- MM3
+        tot_monto_mm3 AS tot_monto_mm3_pos,
+        tot_trxs_mm3 AS tot_trxs_mm3_pos,
+        tot_ticket_mm3 AS tot_ticket_mm3_pos,
+        -- MM6
+        tot_monto_mm6 AS tot_monto_mm6_pos,
+        tot_trxs_mm6 AS tot_trxs_mm6_pos,
+        tot_ticket_mm6 AS tot_ticket_mm6_pos,
+        -- MAX
+        tot_monto_max3 AS tot_monto_max3_pos,
+        tot_trxs_max3 AS tot_trxs_max3_pos,
+        tot_monto_max6 AS tot_monto_max6_pos,
+        tot_trxs_max6 AS tot_trxs_max6_pos,
+        tot_monto_max_hist AS tot_monto_max_hist_pos,
+        -- MIN
+        tot_monto_min3 AS tot_monto_min3_pos,
+        tot_trxs_min3 AS tot_trxs_min3_pos,
+        tot_monto_min6 AS tot_monto_min6_pos,
+        tot_trxs_min6 AS tot_trxs_min6_pos,
+        tot_monto_min_hist AS tot_monto_min_hist_pos,
+        -- Rango y estacionalidad
+        tot_monto_rango3 AS tot_monto_rango3_pos,
+        tot_monto_rango6 AS tot_monto_rango6_pos,
+        tot_ratio_max_mm3 AS tot_ratio_max_mm3_pos,
+        tot_ratio_mm3_mm6 AS tot_ratio_mm3_mm6_pos,
+        -- Prom histórico
+        tot_monto_prom_hist AS tot_monto_prom_hist_pos,
+        -- YTD
+        tot_monto_ytd AS tot_monto_ytd_pos,
+        tot_trxs_ytd AS tot_trxs_ytd_pos,
+        tot_meses_ytd AS tot_meses_ytd_pos,
+        -- Acumulado histórico
+        tot_monto_acum AS tot_monto_acum_pos,
+        tot_meses_acum AS tot_meses_acum_pos,
+        -- Log-transforms
+        tot_log_monto_mes AS tot_log_monto_mes_pos,
+        tot_log_monto_mm3 AS tot_log_monto_mm3_pos,
+        tot_log_monto_mm6 AS tot_log_monto_mm6_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN B — VISA
+        -- ════════════════════════════════════════════════
+        visa_monto_mes AS visa_monto_mes_pos,
+        visa_trxs_mes AS visa_trxs_mes_pos,
+        visa_ticket_mes AS visa_ticket_mes_pos,
+        visa_activo_mes AS visa_activo_mes_pos,
+        visa_monto_lag1 AS visa_monto_lag1_pos,
+        visa_monto_var1 AS visa_monto_var1_pos,
+        visa_monto_ratio1 AS visa_monto_ratio1_pos,
+        visa_monto_mm3 AS visa_monto_mm3_pos,
+        visa_trxs_mm3 AS visa_trxs_mm3_pos,
+        visa_monto_mm6 AS visa_monto_mm6_pos,
+        visa_trxs_mm6 AS visa_trxs_mm6_pos,
+        visa_monto_max3 AS visa_monto_max3_pos,
+        visa_monto_max6 AS visa_monto_max6_pos,
+        visa_monto_min3 AS visa_monto_min3_pos,
+        visa_monto_min6 AS visa_monto_min6_pos,
+        visa_monto_max_hist AS visa_monto_max_hist_pos,
+        visa_ratio_mm3_mm6 AS visa_ratio_mm3_mm6_pos,
+        visa_share_mes AS visa_share_mes_pos,
+        visa_share_mm3 AS visa_share_mm3_pos,
+        visa_monto_ytd AS visa_monto_ytd_pos,
+        visa_meses_acum AS visa_meses_acum_pos,
+        visa_log_monto_mes AS visa_log_monto_mes_pos,
+        visa_log_monto_mm3 AS visa_log_monto_mm3_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN C — AMEX
+        -- ════════════════════════════════════════════════
+        amex_monto_mes AS amex_monto_mes_pos,
+        amex_trxs_mes AS amex_trxs_mes_pos,
+        amex_ticket_mes AS amex_ticket_mes_pos,
+        amex_activo_mes AS amex_activo_mes_pos,
+        amex_monto_lag1 AS amex_monto_lag1_pos,
+        amex_monto_var1 AS amex_monto_var1_pos,
+        amex_monto_ratio1 AS amex_monto_ratio1_pos,
+        amex_monto_mm3 AS amex_monto_mm3_pos,
+        amex_trxs_mm3 AS amex_trxs_mm3_pos,
+        amex_monto_mm6 AS amex_monto_mm6_pos,
+        amex_trxs_mm6 AS amex_trxs_mm6_pos,
+        amex_monto_max3 AS amex_monto_max3_pos,
+        amex_monto_max6 AS amex_monto_max6_pos,
+        amex_monto_min3 AS amex_monto_min3_pos,
+        amex_monto_min6 AS amex_monto_min6_pos,
+        amex_monto_max_hist AS amex_monto_max_hist_pos,
+        amex_ratio_mm3_mm6 AS amex_ratio_mm3_mm6_pos,
+        amex_share_mes AS amex_share_mes_pos,
+        amex_share_mm3 AS amex_share_mm3_pos,
+        amex_monto_ytd AS amex_monto_ytd_pos,
+        amex_meses_acum AS amex_meses_acum_pos,
+        amex_log_monto_mes AS amex_log_monto_mes_pos,
+        amex_log_monto_mm3 AS amex_log_monto_mm3_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN D — DINERS
+        -- ════════════════════════════════════════════════
+        diners_monto_mes AS diners_monto_mes_pos,
+        diners_trxs_mes AS diners_trxs_mes_pos,
+        diners_ticket_mes AS diners_ticket_mes_pos,
+        diners_activo_mes AS diners_activo_mes_pos,
+        diners_monto_lag1 AS diners_monto_lag1_pos,
+        diners_monto_var1 AS diners_monto_var1_pos,
+        diners_monto_ratio1 AS diners_monto_ratio1_pos,
+        diners_monto_mm3 AS diners_monto_mm3_pos,
+        diners_trxs_mm3 AS diners_trxs_mm3_pos,
+        diners_monto_mm6 AS diners_monto_mm6_pos,
+        diners_trxs_mm6 AS diners_trxs_mm6_pos,
+        diners_monto_max3 AS diners_monto_max3_pos,
+        diners_monto_max6 AS diners_monto_max6_pos,
+        diners_monto_min3 AS diners_monto_min3_pos,
+        diners_monto_min6 AS diners_monto_min6_pos,
+        diners_monto_max_hist AS diners_monto_max_hist_pos,
+        diners_ratio_mm3_mm6 AS diners_ratio_mm3_mm6_pos,
+        diners_share_mes AS diners_share_mes_pos,
+        diners_share_mm3 AS diners_share_mm3_pos,
+        diners_monto_ytd AS diners_monto_ytd_pos,
+        diners_meses_acum AS diners_meses_acum_pos,
+        diners_log_monto_mes AS diners_log_monto_mes_pos,
+        diners_log_monto_mm3 AS diners_log_monto_mm3_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN E — DIVERSIFICACIÓN Y FLAGS
+        -- ════════════════════════════════════════════════
+
+        -- Marca dominante del mes
+        CASE
+            WHEN visa_monto_mes >= amex_monto_mes
+             AND visa_monto_mes >= diners_monto_mes  THEN 'VISA'
+            WHEN amex_monto_mes >= diners_monto_mes  THEN 'AMEX'
+            ELSE 'DINERS'
+        END                                                               AS marca_dominante_mes_pos,
+
+        -- Número de marcas activas el mes
+        visa_activo_mes + amex_activo_mes + diners_activo_mes             AS n_marcas_activas_mes_pos,
+
+        -- Ratio AMEX/VISA — señal de cliente premium
+        amex_monto_mes / NULLIF(visa_monto_mes, 0)                       AS ratio_amex_visa_mes_pos,
+        amex_monto_mm3 / NULLIF(visa_monto_mm3, 0)                       AS ratio_amex_visa_mm3_pos,
+
+        -- Diversificación HHI (índice de concentración por marca)
+        -- cercano a 1 = monopolio de una marca · cercano a 0 = diversificado
+        POWER(visa_monto_mes   / NULLIF(tot_monto_mes, 0), 2) +
+        POWER(amex_monto_mes   / NULLIF(tot_monto_mes, 0), 2) +
+        POWER(diners_monto_mes / NULLIF(tot_monto_mes, 0), 2)            AS hhi_marcas_mes_pos,
+
+        -- Flags binarios del mes
+        CASE WHEN tot_monto_mes  >= 5000  THEN 1 ELSE 0 END              AS flag_sobre_5k_mes_pos,
+        CASE WHEN tot_monto_mes  >= 8000  THEN 1 ELSE 0 END              AS flag_sobre_8k_mes_pos,
+        CASE WHEN tot_monto_mm3  >= 5000  THEN 1 ELSE 0 END              AS flag_sobre_5k_mm3_pos,
+        CASE WHEN tot_monto_mm3  >= 8000  THEN 1 ELSE 0 END              AS flag_sobre_8k_mm3_pos,
+        CASE WHEN tot_monto_ratio1 > 1    THEN 1 ELSE 0 END              AS flag_creciendo_mes_pos,
+        CASE WHEN tot_ratio_mm3_mm6 > 1   THEN 1 ELSE 0 END              AS flag_creciendo_mm3_pos,
+        CASE WHEN visa_activo_mes + amex_activo_mes
+                  + diners_activo_mes > 1 THEN 1 ELSE 0 END              AS flag_multi_marca_mes_pos,
+
+        -- ════════════════════════════════════════════════
+        -- SECCIÓN F — VARIABLES NUEVAS PARA SUBIR GINI
+        -- Comportamiento, consistencia, momentum y tendencia.
+        -- El panel balanceado permite calcularlas correctamente.
+        -- ════════════════════════════════════════════════
+
+        -- F1. CONSISTENCIA / INTERMITENCIA
+        CAST(meses_activos_3m AS DOUBLE) / 3.0                           AS tasa_actividad_3m_pos,
+        CAST(meses_activos_6m AS DOUBLE) / 6.0                           AS tasa_actividad_6m_pos,
+        CASE WHEN flag_activo_mes = 0 THEN 1 ELSE 0 END                  AS mes_inactivo_pos,
+
+        -- F2. COEFICIENTE DE VARIACIÓN (volatilidad relativa 6m)
+        STDDEV(tot_monto_mes) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) /
+        NULLIF(AVG(tot_monto_mes) OVER (PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN 5 PRECEDING AND CURRENT ROW), 0)                AS tot_cv_6m_pos,
+
+        -- F3. MOMENTUM / ACELERACIÓN
+        (tot_monto_mes - tot_monto_lag1) -
+        (tot_monto_lag1 - LAG(tot_monto_mes, 2) OVER (
+            PARTITION BY num_ruc_val ORDER BY periodo_val))              AS tot_aceleracion_pos,
+
+        -- F4. POSICIÓN vs HISTORIA PROPIA
+        tot_monto_mes / NULLIF(tot_monto_prom_hist, 0)                   AS tot_vs_prom_hist_pos,
+        CASE WHEN tot_monto_mes >= tot_monto_max_hist
+             AND tot_monto_mes > 0 THEN 1 ELSE 0 END                    AS flag_mes_record_pos,
+
+        -- F5. TENDENCIA DE TICKET
+        tot_ticket_mes / NULLIF(tot_ticket_lag1, 0)                      AS tot_ticket_ratio1_pos,
+        tot_ticket_mm3 / NULLIF(tot_ticket_mm6, 0)                       AS tot_ticket_tend_pos,
+
+        -- F6. DRAWDOWN — caída desde el pico histórico
+        1 - (tot_monto_mes / NULLIF(tot_monto_max_hist, 0))             AS tot_drawdown_pos,
+
+        -- F7. INTENSIDAD TRANSACCIONAL
+        tot_trxs_mes / NULLIF((visa_activo_mes + amex_activo_mes + diners_activo_mes ), 0)                   AS trxs_x_marca_pos,
+
+        -- F8. CRECIMIENTO INTERANUAL (YoY, vs hace 12 meses)
+        tot_monto_mes / NULLIF(LAG(tot_monto_mes, 12) OVER (
+            PARTITION BY num_ruc_val ORDER BY periodo_val), 0)           AS tot_yoy_pos,
+
+        -- F9. SHARE PREMIUM (AMEX) ponderado por consistencia
+        amex_share_mes * (CAST(meses_activos_6m AS DOUBLE)/6.0)         AS amex_share_ponderado_pos,
+
+        -- F10. RECENCIA — gap desde la última venta real
+        periodo_val - MAX(CASE WHEN flag_activo_mes=1 THEN periodo_val END) OVER (
+            PARTITION BY num_ruc_val ORDER BY periodo_val
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)            AS recencia_ultima_venta_pos,
+
+        -- Racha: meses consecutivos activos acumulados
+        tot_meses_acum                                                    AS meses_activos_pos,
+        periodo
+
+    FROM pos_panel
+)
+
+-- ── RESULTADO FINAL
+SELECT * FROM pos_final
+ORDER BY num_ruc_val, periodo_val
+)
+
+
+-- VALIDACION 
+
+
+SELECT * FROM disc_comercial.HM_TRANSACCIONES_POS_VPC WHERE periodo_val > 202501 
+AND num_ruc_val = '005916F5A4A7E27181892A65ED3DBCA43059ACC9942537A5F6DCFEB7992392DC'
+ORDER BY periodo_val DESC
+LIMIT 100
+
+
+
+/*
+SELECT * 
+    FROM e_perm_aws.T_VPC_CLIENTE_BANCA_FINAL_HST WHERE num_ruc_val = '005916F5A4A7E27181892A65ED3DBCA43059ACC9942537A5F6DCFEB7992392DC' 
+    ORDER BY periodo_val DESC
+ */   
+    
+    
+--SELECT * FROM e_perm_aws.t_agg_mes_vpc_transacc_sav_imp  WHERE cuc_num_val = '0015792835' AND periodo_val = 202602  LIMIT 1000
+--SELECT * FROM e_perm_aws.t_vpc_transacciones_sav_imp  WHERE cuc_num_val = '0015792835'  AND periodo_informacion_val = 202602 LIMIT 1000
+
+
