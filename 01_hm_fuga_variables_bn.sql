@@ -1,0 +1,333 @@
+-- ============================================================================
+-- MODELO DE FUGA - NBC Empresas  |  TABLA 2: VARIABLES (features)
+-- ----------------------------------------------------------------------------
+-- Grano   : RUC (numeroruc) x periodo mensual (panel)
+-- Alcance : MALLA COMPLETA - todos los RUC, toda la historia (incl. 2024 para lags).
+--           SIN filtro de saldo >50K y SIN censura: no se pierde ningun lead.
+-- Features: saldo / monto desembolsado / cuota / TEA / cuotas / meses_desde_desem
+--           por producto + tendencias (deltas, prepagos, aceleracion) BACKWARD.
+-- El universo (>50K) y el target viven en hm_fuga_universo_target_bn.
+-- Union final:  universo LEFT JOIN variables  ON periodo, numeroruc.
+-- ============================================================================
+-- DROP TABLE disc_comercial.hm_fuga_variables_bn
+
+CREATE TABLE disc_comercial.hm_fuga_variables_bn
+WITH (
+    format = 'PARQUET',
+    parquet_compression = 'SNAPPY',
+    partitioned_by = ARRAY['periodo_ejecucion']
+) AS
+WITH
+-- Parametros de diseno de features (editar en un solo lugar) -----------------
+params AS (
+    SELECT 1.8  AS umbral_prepago,   -- prepago si la caida > 1.8x la cuota esperada
+           -0.5 AS umbral_caida,     -- 'producto cayendo' si el saldo cae > 50% en 3m
+           6    AS meses_reciente    -- 'credito reciente' si <= 6 meses desde desembolso
+),
+-- 0) Credito de mayor saldo (atributos "del principal") ---------------------
+principal AS (
+    SELECT periodo, numeroruc, producto_real AS producto_principal,
+           CAST(tea_aprobada AS double) AS tea_principal
+    FROM (
+        SELECT periodo, numeroruc, producto_real, tea_aprobada,
+               ROW_NUMBER() OVER (PARTITION BY periodo, numeroruc
+                                  ORDER BY CAST(saldo_pri AS double) DESC) AS rn
+        FROM disc_comercial.kbr_po_fuga_bn_hash
+        WHERE estado_solcre='VIGENTE' AND CAST(saldo_pri AS double) > 0
+    ) WHERE rn = 1
+),
+
+-- 1) Snapshot mensual COLAPSADO a nivel RUC (toda la historia) ---------------
+cliente_mes AS (
+    SELECT
+        b.periodo, b.numeroruc, MAX(b.cod_unico) AS cod_unico,
+        CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer) AS periodo_idx,
+        -- exposicion
+        SUM(CAST(b.saldo_pri AS double))                      AS saldo_total,
+        COUNT(DISTINCT b.cod_credito)                         AS n_creditos,
+        SUM(CAST(b.monto_desembolsado AS double))             AS monto_desem_total,
+        SUM(CAST(b.saldo_pri AS double)) / NULLIF(SUM(CAST(b.monto_desembolsado AS double)),0) AS pct_saldo_remanente,
+        -- tasa
+        MAX(CAST(b.tea_aprobada AS double))                   AS tea_max,
+        MIN(CAST(b.tea_aprobada AS double))                   AS tea_min,
+        SUM(CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double)) / NULLIF(SUM(CAST(b.saldo_pri AS double)),0) AS tea_pond,
+        -- antiguedad (meses desde desembolso)
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_min,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MIN(CASE WHEN substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_max,
+        -- cuotas
+        SUM(CAST(b.nro_cuotas AS integer))                    AS cuotas_total,
+        SUM(CAST(b.nro_cuotas_pendientes AS integer))         AS cuotas_pend_total,
+        1.0 - SUM(CAST(b.nro_cuotas_pendientes AS double)) / NULLIF(SUM(CAST(b.nro_cuotas AS double)),0) AS pct_avance_cuotas,
+        SUM(CAST(b.cuota AS double))                          AS cuota_total,
+        -- riesgo
+        MAX(CAST(b.atraso_maxpag AS integer))                 AS atraso_max,
+        MAX(CAST(b.puntaje_scoring AS double))                AS scoring_max,
+        MAX(CAST(b.dias_venc AS integer))                     AS dias_venc_max,
+        -- mix de producto (6 flags)
+        MAX(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN 1 ELSE 0 END) AS flg_cap_trabajo,
+        MAX(CASE WHEN b.producto_real='COMPRA DE DEUDA'    THEN 1 ELSE 0 END) AS flg_compra_deuda,
+        MAX(CASE WHEN b.producto_real='ACTIVO FIJO'        THEN 1 ELSE 0 END) AS flg_activo_fijo,
+        MAX(CASE WHEN b.producto_real='LINEA REVOLVENTE'   THEN 1 ELSE 0 END) AS flg_linea_revolv,
+        MAX(CASE WHEN b.producto_real='ESTACIONAL'         THEN 1 ELSE 0 END) AS flg_estacional,
+        MAX(CASE WHEN b.producto_real='LM ESTACIONAL'      THEN 1 ELSE 0 END) AS flg_lm_estacional,
+
+        -- ===================== Features por PRODUCTO =====================
+        -- saldo / monto desem / cuotas -> COALESCE a 0 ; TEA / meses / %avance -> NULL
+
+        -- CAPITAL DE TRABAJO -----------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_cap_trabajo,
+        COALESCE(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_cap_trabajo,
+        MAX(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.tea_aprobada AS double) ELSE 0  END) AS tea_cap_trabajo,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_cap_trabajo,
+        COALESCE(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_cap_trabajo,
+        COALESCE(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_cap_trabajo,
+        1.0 - SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_cap_trabajo,
+        COALESCE(SUM(CASE WHEN b.producto_real='CAPITAL DE TRABAJO' THEN CAST(b.cuota AS double) END), 0) AS cuota_cap_trabajo,
+
+        -- COMPRA DE DEUDA --------------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_compra_deuda,
+        COALESCE(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_compra_deuda,
+        SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double) END)
+          / NULLIF(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.saldo_pri AS double) END),0) AS tea_pond_compra_deuda,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='COMPRA DE DEUDA' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_compra_deuda,
+        COALESCE(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_compra_deuda,
+        COALESCE(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_compra_deuda,
+        1.0 - SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_compra_deuda,
+        COALESCE(SUM(CASE WHEN b.producto_real='COMPRA DE DEUDA' THEN CAST(b.cuota AS double) END), 0) AS cuota_compra_deuda,
+
+        -- ACTIVO FIJO ------------------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_activo_fijo,
+        COALESCE(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_activo_fijo,
+        SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double) END)
+          / NULLIF(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.saldo_pri AS double) END),0) AS tea_pond_activo_fijo,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='ACTIVO FIJO' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_activo_fijo,
+        COALESCE(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_activo_fijo,
+        COALESCE(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_activo_fijo,
+        1.0 - SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_activo_fijo,
+        COALESCE(SUM(CASE WHEN b.producto_real='ACTIVO FIJO' THEN CAST(b.cuota AS double) END), 0) AS cuota_activo_fijo,
+
+        -- LINEA REVOLVENTE -------------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_linea_revolv,
+        COALESCE(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_linea_revolv,
+        SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double) END)
+          / NULLIF(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.saldo_pri AS double) END),0) AS tea_pond_linea_revolv,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='LINEA REVOLVENTE' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_linea_revolv,
+        COALESCE(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_linea_revolv,
+        COALESCE(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_linea_revolv,
+        1.0 - SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_linea_revolv,
+        COALESCE(SUM(CASE WHEN b.producto_real='LINEA REVOLVENTE' THEN CAST(b.cuota AS double) END), 0) AS cuota_linea_revolv,
+
+        -- ESTACIONAL -------------------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_estacional,
+        SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double) END)
+          / NULLIF(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.saldo_pri AS double) END),0) AS tea_pond_estacional,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='ESTACIONAL' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_estacional,
+        1.0 - SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='ESTACIONAL' THEN CAST(b.cuota AS double) END), 0) AS cuota_estacional,
+
+        -- LM ESTACIONAL ----------------------------------------------------
+        COALESCE(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.saldo_pri AS double) END), 0) AS saldo_lm_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.monto_desembolsado AS double) END), 0) AS monto_desem_lm_estacional,
+        SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.saldo_pri AS double)*CAST(b.tea_aprobada AS double) END)
+          / NULLIF(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.saldo_pri AS double) END),0) AS tea_pond_lm_estacional,
+        (CAST(substr(b.periodo,1,4) AS integer)*12 + CAST(substr(b.periodo,5,2) AS integer))
+          - MAX(CASE WHEN b.producto_real='LM ESTACIONAL' AND substr(b.fecha_desembolsado,1,4)>'1900'
+                     THEN CAST(substr(b.fecha_desembolsado,1,4) AS integer)*12 + CAST(substr(b.fecha_desembolsado,6,2) AS integer) END) AS meses_desde_desem_lm_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.nro_cuotas AS integer) END), 0) AS cuotas_total_lm_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.nro_cuotas_pendientes AS integer) END), 0) AS cuotas_pend_lm_estacional,
+        1.0 - SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.nro_cuotas_pendientes AS double) END)
+              / NULLIF(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.nro_cuotas AS double) END),0) AS pct_avance_cuotas_lm_estacional,
+        COALESCE(SUM(CASE WHEN b.producto_real='LM ESTACIONAL' THEN CAST(b.cuota AS double) END), 0) AS cuota_lm_estacional
+    FROM disc_comercial.kbr_po_fuga_bn_hash b
+    WHERE b.estado_solcre='VIGENTE' AND CAST(b.saldo_pri AS double) > 0
+    GROUP BY b.periodo, b.numeroruc
+),
+
+-- 2) Lags mes a mes (continuidad validada con el indice de periodo) ----------
+lags AS (
+    SELECT cm.*,
+        periodo_idx - LAG(periodo_idx,1) OVER w  AS gap_1,
+        periodo_idx - LAG(periodo_idx,3) OVER w  AS gap_3,
+        periodo_idx - LAG(periodo_idx,6) OVER w  AS gap_6,
+        LAG(saldo_total,1)       OVER w AS saldo_l1,
+        LAG(saldo_total,3)       OVER w AS saldo_l3,
+        LAG(saldo_total,6)       OVER w AS saldo_l6,
+        LAG(tea_pond,3)          OVER w AS tea_pond_l3,
+        LAG(n_creditos,3)        OVER w AS ncred_l3,
+        LAG(cuotas_pend_total,1) OVER w AS cuotas_pend_l1,
+        LAG(scoring_max,3)       OVER w AS scoring_l3,
+        LAG(atraso_max,3)        OVER w AS atraso_l3,
+        -- lags de saldo POR PRODUCTO (para decrecimientos 3m / 6m)
+        LAG(saldo_cap_trabajo,3) OVER w AS saldo_cap_trabajo_l3,  LAG(saldo_cap_trabajo,6) OVER w AS saldo_cap_trabajo_l6,
+        LAG(saldo_compra_deuda,3) OVER w AS saldo_compra_deuda_l3, LAG(saldo_compra_deuda,6) OVER w AS saldo_compra_deuda_l6,
+        LAG(saldo_activo_fijo,3) OVER w AS saldo_activo_fijo_l3,  LAG(saldo_activo_fijo,6) OVER w AS saldo_activo_fijo_l6,
+        LAG(saldo_linea_revolv,3) OVER w AS saldo_linea_revolv_l3, LAG(saldo_linea_revolv,6) OVER w AS saldo_linea_revolv_l6,
+        LAG(saldo_estacional,3) OVER w AS saldo_estacional_l3,    LAG(saldo_estacional,6) OVER w AS saldo_estacional_l6,
+        LAG(saldo_lm_estacional,3) OVER w AS saldo_lm_estacional_l3, LAG(saldo_lm_estacional,6) OVER w AS saldo_lm_estacional_l6,
+        ROW_NUMBER()             OVER w AS meses_en_panel
+    FROM cliente_mes cm
+    WINDOW w AS (PARTITION BY numeroruc ORDER BY periodo_idx)
+),
+
+-- 3) Deltas por fila (solo validos si el lag esta a la distancia correcta) ---
+deltas AS (
+    SELECT l.*,
+        CASE WHEN gap_3=3 THEN (saldo_total - saldo_l3)/NULLIF(saldo_l3,0) END AS pct_d_saldo_3m,
+        CASE WHEN gap_6=6 THEN (saldo_total - saldo_l6)/NULLIF(saldo_l6,0) END AS pct_d_saldo_6m,
+        CASE WHEN gap_3=3 THEN tea_pond - tea_pond_l3 END                      AS d_tea_pond_3m,
+        CASE WHEN gap_3=3 THEN n_creditos - ncred_l3 END                       AS d_n_creditos_3m,
+        -- decrecimientos de saldo POR PRODUCTO (saldo en 0 -> capta cancelaciones)
+        CASE WHEN gap_3=3 THEN (saldo_cap_trabajo  - saldo_cap_trabajo_l3) /NULLIF(saldo_cap_trabajo_l3,0)  END AS pct_d_saldo_3m_cap_trabajo,
+        CASE WHEN gap_6=6 THEN (saldo_cap_trabajo  - saldo_cap_trabajo_l6) /NULLIF(saldo_cap_trabajo_l6,0)  END AS pct_d_saldo_6m_cap_trabajo,
+        CASE WHEN gap_3=3 THEN (saldo_compra_deuda - saldo_compra_deuda_l3)/NULLIF(saldo_compra_deuda_l3,0) END AS pct_d_saldo_3m_compra_deuda,
+        CASE WHEN gap_6=6 THEN (saldo_compra_deuda - saldo_compra_deuda_l6)/NULLIF(saldo_compra_deuda_l6,0) END AS pct_d_saldo_6m_compra_deuda,
+        CASE WHEN gap_3=3 THEN (saldo_activo_fijo  - saldo_activo_fijo_l3) /NULLIF(saldo_activo_fijo_l3,0)  END AS pct_d_saldo_3m_activo_fijo,
+        CASE WHEN gap_6=6 THEN (saldo_activo_fijo  - saldo_activo_fijo_l6) /NULLIF(saldo_activo_fijo_l6,0)  END AS pct_d_saldo_6m_activo_fijo,
+        CASE WHEN gap_3=3 THEN (saldo_linea_revolv - saldo_linea_revolv_l3)/NULLIF(saldo_linea_revolv_l3,0) END AS pct_d_saldo_3m_linea_revolv,
+        CASE WHEN gap_6=6 THEN (saldo_linea_revolv - saldo_linea_revolv_l6)/NULLIF(saldo_linea_revolv_l6,0) END AS pct_d_saldo_6m_linea_revolv,
+        CASE WHEN gap_3=3 THEN (saldo_estacional   - saldo_estacional_l3)  /NULLIF(saldo_estacional_l3,0)   END AS pct_d_saldo_3m_estacional,
+        CASE WHEN gap_6=6 THEN (saldo_estacional   - saldo_estacional_l6)  /NULLIF(saldo_estacional_l6,0)   END AS pct_d_saldo_6m_estacional,
+        CASE WHEN gap_3=3 THEN (saldo_lm_estacional- saldo_lm_estacional_l3)/NULLIF(saldo_lm_estacional_l3,0)END AS pct_d_saldo_3m_lm_estacional,
+        CASE WHEN gap_6=6 THEN (saldo_lm_estacional- saldo_lm_estacional_l6)/NULLIF(saldo_lm_estacional_l6,0)END AS pct_d_saldo_6m_lm_estacional,
+        -- prepago del mes: caida de saldo muy por encima de una cuota de capital
+        CASE WHEN gap_1=1 THEN saldo_l1 - saldo_total END                      AS drop_1m,
+        CASE WHEN gap_1=1 THEN saldo_l1 / NULLIF(cuotas_pend_l1,0) END         AS drop_esperado_1m,
+        -- aceleracion de la caida de saldo (3m vs 3m previos)
+        CASE WHEN gap_6=6 THEN (saldo_total - saldo_l3)/NULLIF(saldo_l3,0)
+                            - (saldo_l3    - saldo_l6)/NULLIF(saldo_l6,0) END   AS aceleracion_saldo_3m,
+        -- tendencia de riesgo (deterioro), no solo el nivel
+        CASE WHEN gap_3=3 THEN scoring_max - scoring_l3 END                     AS d_scoring_3m,
+        CASE WHEN gap_3=3 THEN atraso_max  - atraso_l3  END                     AS d_atraso_3m
+    FROM lags l
+),
+deltas2 AS (
+    SELECT d.*,
+        CASE WHEN drop_1m > pm.umbral_prepago*drop_esperado_1m THEN 1 ELSE 0 END AS prepago_mes,
+        GREATEST(COALESCE(drop_1m,0) - COALESCE(drop_esperado_1m,0), 0) AS exceso_prepago_1m
+    FROM deltas d
+    CROSS JOIN params pm
+),
+
+-- 4) Acumulados moviles (prepagos en ventana de 6 meses, max caida en 3m) ----
+panel AS (
+    SELECT d2.*,
+        SUM(prepago_mes)       OVER w6 AS n_prepagos_6m,
+        SUM(exceso_prepago_1m) OVER w6 AS monto_prepago_6m,
+        MAX(CASE WHEN gap_1=1 THEN (saldo_l1 - saldo_total)/NULLIF(saldo_l1,0) END) OVER w3 AS max_caida_rel_3m
+    FROM deltas2 d2
+    WINDOW
+        w6 AS (PARTITION BY numeroruc ORDER BY periodo_idx ROWS BETWEEN 5 PRECEDING AND CURRENT ROW),
+        w3 AS (PARTITION BY numeroruc ORDER BY periodo_idx ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+),
+
+
+-- 5) Base = panel + atributos del principal  (SIN filtro >50K, SIN censura)
+--     -> malla completa: TODOS los leads, TODA la historia. No se pierde ningun lead.
+po AS (
+    SELECT p.*, pr.producto_principal, pr.tea_principal
+    FROM panel p
+    LEFT JOIN principal pr ON p.periodo = pr.periodo AND p.numeroruc = pr.numeroruc
+)
+
+SELECT
+    po.periodo, po.numeroruc, po.cod_unico,
+    -- nivel: exposicion / tasa / antiguedad / cuotas / riesgo / mix
+    po.saldo_total, po.n_creditos, po.monto_desem_total, po.pct_saldo_remanente,
+    po.tea_max, po.tea_min, po.tea_pond, po.tea_principal,
+    po.meses_desde_desem_min, po.meses_desde_desem_max,
+    po.cuotas_total, po.cuotas_pend_total, po.pct_avance_cuotas, po.cuota_total,
+    po.atraso_max, po.scoring_max, po.dias_venc_max,
+    po.producto_principal,
+    po.flg_cap_trabajo, po.flg_compra_deuda, po.flg_activo_fijo,
+    po.flg_linea_revolv, po.flg_estacional, po.flg_lm_estacional,
+
+    -- ===== Features por PRODUCTO: saldo / monto / TEA / meses / cuotas / decrecimientos =====
+    -- CAPITAL DE TRABAJO
+    po.saldo_cap_trabajo, po.monto_desem_cap_trabajo, po.tea_cap_trabajo, po.meses_desde_desem_cap_trabajo,
+    po.cuotas_total_cap_trabajo, po.cuotas_pend_cap_trabajo, po.pct_avance_cuotas_cap_trabajo, po.cuota_cap_trabajo,
+    po.pct_d_saldo_3m_cap_trabajo, po.pct_d_saldo_6m_cap_trabajo,
+    -- COMPRA DE DEUDA
+    po.saldo_compra_deuda, po.monto_desem_compra_deuda, po.tea_pond_compra_deuda, po.meses_desde_desem_compra_deuda,
+    po.cuotas_total_compra_deuda, po.cuotas_pend_compra_deuda, po.pct_avance_cuotas_compra_deuda, po.cuota_compra_deuda,
+    po.pct_d_saldo_3m_compra_deuda, po.pct_d_saldo_6m_compra_deuda,
+    -- ACTIVO FIJO
+    po.saldo_activo_fijo, po.monto_desem_activo_fijo, po.tea_pond_activo_fijo, po.meses_desde_desem_activo_fijo,
+    po.cuotas_total_activo_fijo, po.cuotas_pend_activo_fijo, po.pct_avance_cuotas_activo_fijo, po.cuota_activo_fijo,
+    po.pct_d_saldo_3m_activo_fijo, po.pct_d_saldo_6m_activo_fijo,
+    -- LINEA REVOLVENTE
+    po.saldo_linea_revolv, po.monto_desem_linea_revolv, po.tea_pond_linea_revolv, po.meses_desde_desem_linea_revolv,
+    po.cuotas_total_linea_revolv, po.cuotas_pend_linea_revolv, po.pct_avance_cuotas_linea_revolv, po.cuota_linea_revolv,
+    po.pct_d_saldo_3m_linea_revolv, po.pct_d_saldo_6m_linea_revolv,
+    -- ESTACIONAL
+    po.saldo_estacional, po.monto_desem_estacional, po.tea_pond_estacional, po.meses_desde_desem_estacional,
+    po.cuotas_total_estacional, po.cuotas_pend_estacional, po.pct_avance_cuotas_estacional, po.cuota_estacional,
+    po.pct_d_saldo_3m_estacional, po.pct_d_saldo_6m_estacional,
+    -- LM ESTACIONAL
+    po.saldo_lm_estacional, po.monto_desem_lm_estacional, po.tea_pond_lm_estacional, po.meses_desde_desem_lm_estacional,
+    po.cuotas_total_lm_estacional, po.cuotas_pend_lm_estacional, po.pct_avance_cuotas_lm_estacional, po.cuota_lm_estacional,
+    po.pct_d_saldo_3m_lm_estacional, po.pct_d_saldo_6m_lm_estacional,
+
+    -- TENDENCIA (backward-looking)
+    po.pct_d_saldo_3m, po.pct_d_saldo_6m, po.d_tea_pond_3m, po.d_n_creditos_3m,
+    po.n_prepagos_6m, po.monto_prepago_6m, po.max_caida_rel_3m, po.meses_en_panel,
+
+    -- ===== NUEVAS: concentracion / desenganche / aceleracion / riesgo-tendencia =====
+    po.aceleracion_saldo_3m, po.d_scoring_3m, po.d_atraso_3m,
+    -- concentracion de cartera (HHI ~1 = mono-producto, fragil)
+    ( POWER(po.saldo_cap_trabajo  /NULLIF(po.saldo_total,0),2)
+    + POWER(po.saldo_compra_deuda /NULLIF(po.saldo_total,0),2)
+    + POWER(po.saldo_activo_fijo  /NULLIF(po.saldo_total,0),2)
+    + POWER(po.saldo_linea_revolv /NULLIF(po.saldo_total,0),2)
+    + POWER(po.saldo_estacional   /NULLIF(po.saldo_total,0),2)
+    + POWER(po.saldo_lm_estacional/NULLIF(po.saldo_total,0),2) )            AS hhi_producto,
+    (po.flg_cap_trabajo+po.flg_compra_deuda+po.flg_activo_fijo
+     +po.flg_linea_revolv+po.flg_estacional+po.flg_lm_estacional)           AS n_productos_con_saldo,
+    po.saldo_cap_trabajo / NULLIF(po.saldo_total,0)                         AS pct_saldo_cap_trabajo,
+    -- cancelaciones coordinadas (varias lineas cayendo / canceladas a la vez)
+    ( CASE WHEN po.pct_d_saldo_3m_cap_trabajo  < pm.umbral_caida THEN 1 ELSE 0 END
+    + CASE WHEN po.pct_d_saldo_3m_compra_deuda < pm.umbral_caida THEN 1 ELSE 0 END
+    + CASE WHEN po.pct_d_saldo_3m_activo_fijo  < pm.umbral_caida THEN 1 ELSE 0 END
+    + CASE WHEN po.pct_d_saldo_3m_linea_revolv < pm.umbral_caida THEN 1 ELSE 0 END )   AS n_productos_cayendo_3m,
+    ( CASE WHEN po.saldo_cap_trabajo_l3>0  AND po.saldo_cap_trabajo=0  THEN 1 ELSE 0 END
+    + CASE WHEN po.saldo_compra_deuda_l3>0 AND po.saldo_compra_deuda=0 THEN 1 ELSE 0 END
+    + CASE WHEN po.saldo_activo_fijo_l3>0  AND po.saldo_activo_fijo=0  THEN 1 ELSE 0 END
+    + CASE WHEN po.saldo_linea_revolv_l3>0 AND po.saldo_linea_revolv=0 THEN 1 ELSE 0 END ) AS n_productos_cancelados_3m,
+    -- ventana de vida del credito (la fuga es temprana)
+    CASE WHEN po.meses_desde_desem_min <= pm.meses_reciente THEN 1 ELSE 0 END               AS flg_reciente_6m,
+    po.meses_desde_desem_max - po.meses_desde_desem_min                     AS dispersion_antiguedad,
+    -- precio interno relativo (credito caro = blanco de compra de deuda)
+    po.tea_max - po.tea_min                                                 AS spread_tea_interno,
+    po.tea_pond / NULLIF(po.tea_min,0)                                      AS ratio_tea_pond_min,
+    -- carga, ticket e intensidad de prepago
+    po.cuota_total / NULLIF(po.saldo_total,0)                               AS ratio_cuota_saldo,
+    po.saldo_total / NULLIF(po.n_creditos,0)                                AS saldo_por_credito,
+    po.monto_prepago_6m / NULLIF(po.saldo_total,0)                          AS intensidad_prepago_6m,
+    -- estacionalidad (pico de fuga Ene-Feb)
+    CAST(substr(po.periodo,5,2) AS integer)                                 AS mes_calendario,
+
+    SUBSTR(REPLACE(SUBSTR(CAST(date_add('month', -1, DATE_PARSE(CAST(po.periodo AS VARCHAR), '%Y%m')) AS VARCHAR), 1, 10), '-', ''), 1, 6) periodo_ejecucion
+FROM po
+CROSS JOIN params pm
+;
