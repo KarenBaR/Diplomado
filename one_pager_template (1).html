@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Pager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+  :root{
+    --green:#00BE50;
+    --green-dark:#005F1E;
+    --green-tint:#EAFBF0;
+    --green-line:#C6FFC0;
+    --blue:#1F4592;
+    --ink:#1A1A1A;
+    --body:#374151;
+    --muted:#6B7280;
+    --line:#E5E7EB;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Poppins',Arial,sans-serif;
+    background:#F3F4F6;
+    color:var(--body);
+    padding:28px;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .page{
+    width:1280px;
+    margin:0 auto;
+    background:#FFFFFF;
+    border-radius:14px;
+    overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+  }
+
+  /* ---- Banner ---- */
+  .banner{
+    background:var(--green);
+    color:#fff;
+    text-align:center;
+    padding:22px 40px;
+  }
+  .banner h1{font-size:26px;font-weight:700;letter-spacing:.2px;}
+
+  .subtitle{
+    color:var(--blue);
+    font-weight:600;
+    font-size:15px;
+    padding:18px 44px 6px;
+  }
+
+  /* ---- Layout ---- */
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:30px;
+    padding:14px 44px 8px;
+  }
+  .col{display:flex;flex-direction:column;gap:16px;}
+
+  .h{
+    color:var(--green-dark);
+    font-weight:700;
+    font-size:16px;
+    margin-bottom:6px;
+  }
+  .h-blue{color:var(--blue);font-weight:700;font-size:18px;margin:2px 0 6px;}
+  p.txt{font-size:13px;line-height:1.5;color:var(--body);}
+
+  .highlight{
+    background:var(--green-tint);
+    border-radius:8px;
+    padding:12px 14px;
+    font-size:13px;line-height:1.5;
+  }
+  .highlight b{color:var(--green-dark);}
+
+  /* ---- KPIs ---- */
+  .kpi{margin-bottom:12px;}
+  .kpi-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px;}
+  .kpi-row .val{color:var(--green-dark);font-weight:700;}
+  .bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;}
+  .bar span{display:block;height:100%;background:var(--green);border-radius:6px;}
+
+  /* ---- Stat list ---- */
+  ul.stats{list-style:none;display:flex;flex-direction:column;gap:8px;}
+  ul.stats li{font-size:13px;line-height:1.45;padding-left:22px;position:relative;}
+  ul.stats li::before{
+    content:"";position:absolute;left:0;top:5px;
+    width:11px;height:11px;border-radius:3px;background:var(--green);
+  }
+  ul.stats b{color:var(--ink);}
+
+  /* ---- Data sources grid ---- */
+  .data-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;}
+  .data-grid div{font-size:13px;padding-left:24px;position:relative;color:var(--body);}
+  .data-grid div::before{
+    content:"";position:absolute;left:0;top:3px;width:13px;height:13px;border-radius:50%;
+    background:var(--green);
+  }
+
+  .card{
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .check{list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+  .check li{font-size:13px;line-height:1.4;padding-left:20px;position:relative;}
+  .check li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:700;}
+  .badge{font-size:13px;font-weight:600;color:var(--green-dark);margin-top:10px;}
+
+  /* ---- Section band ---- */
+  .band{padding:18px 44px;}
+  .band > .h{font-size:17px;margin-bottom:14px;}
+
+  /* ---- Timeline ---- */
+  .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .step{
+    background:var(--green-tint);
+    border:1px solid var(--green-line);
+    border-radius:10px;
+    padding:12px;
+  }
+  .step .num{
+    width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;
+    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:8px;
+  }
+  .step .st{font-size:13px;font-weight:600;color:var(--ink);}
+  .step .sd{font-size:11px;color:var(--muted);margin-top:3px;}
+
+  /* ---- 2-card row (análisis) ---- */
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .deflist{list-style:none;display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+  .deflist li{font-size:13px;line-height:1.45;color:var(--body);}
+  .deflist li b{color:var(--green-dark);font-weight:600;}
+  .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--blue);background:#EAF0FB;
+       border-radius:6px;padding:2px 8px;margin-bottom:4px;}
+
+  /* ---- 3-card row ---- */
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .row3 .card .h{font-size:14px;}
+  .row3 .card p,.row3 .card li{font-size:12.5px;line-height:1.45;}
+  .row3 ul{list-style:none;display:flex;flex-direction:column;gap:5px;margin-top:6px;}
+  .row3 ul li{padding-left:16px;position:relative;}
+  .row3 ul li::before{content:"";position:absolute;left:0;top:6px;width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+  /* ---- Governance ---- */
+  .gov{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .gov .card{background:var(--green-tint);border-color:var(--green-line);}
+  .gov .role{font-size:14px;font-weight:700;color:var(--green-dark);margin-bottom:5px;}
+  .gov .desc{font-size:12.5px;line-height:1.45;color:var(--body);}
+
+  .divider{height:1px;background:var(--line);margin:0 44px;}
+
+  footer{padding:14px 44px 22px;font-size:11px;color:var(--muted);}
+
+  @media print{
+    body{background:#fff;padding:0;}
+    .page{box-shadow:none;border-radius:0;width:100%;}
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="banner">
+      <h1>One Pager: Modelo de Fuga &mdash; Compra de Deuda</h1>
+    </div>
+    <div class="subtitle">Anticipar la fuga de clientes de alto valor para activar retenci&oacute;n antes de la compra de deuda.</div>
+
+    <!-- ===== Esquema original (2 columnas) ===== -->
+    <div class="grid">
+      <!-- IZQUIERDA -->
+      <div class="col">
+        <div>
+          <div class="h">Objetivo del Modelo</div>
+          <p class="txt">Predecir la probabilidad de fuga / compra de deuda de clientes Banca Negocio, para activar acciones de retenci&oacute;n oportunas y proteger la participaci&oacute;n de cartera (SOW) de IBK.</p>
+        </div>
+
+        <div class="highlight"><b>Reducir:</b> la fuga de clientes de alto SOW y el costo de recuperaci&oacute;n, anticipando la se&ntilde;al antes de que la deuda migre a la competencia.</div>
+
+        <div>
+          <div class="h">KPIs Clave</div>
+          <div class="kpi">
+            <div class="kpi-row"><span>Aumento de saldo en colocaciones</span><span class="val">+X%</span></div>
+            <div class="bar"><span style="width:62%"></span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-row"><span>Aumento del SOW</span><span class="val">+Y%</span></div>
+            <div class="bar"><span style="width:55%"></span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="h">Situaci&oacute;n Actual</div>
+          <ul class="stats">
+            <li><b>1,366 cr&eacute;ditos fugados</b> analizados en el periodo de estudio.</li>
+            <li><b>SOW promedio 77%</b> antes de fugar; 43% ya ten&iacute;a SOW &ge; 90%.</li>
+            <li><b>Reframe:</b> el problema es de <b>retenci&oacute;n</b>, no de captaci&oacute;n.</li>
+            <li><b>BCP</b> principal destino (276 cr&eacute;ditos, S/27MM).</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- DERECHA -->
+      <div class="col">
+        <div>
+          <div class="h">Segmento Target</div>
+          <div class="h-blue">Clientes Banca Negocio con cartera vigente</div>
+          <p class="txt">Foco en clientes de <b>alto valor / alto SOW</b>, donde la fuga tiene mayor impacto en saldos y rentabilidad y donde la gesti&oacute;n comercial directa es viable.</p>
+        </div>
+
+        <div>
+          <div class="h">Data Hist&oacute;rica Relevante</div>
+          <div class="data-grid">
+            <div>Saldos Diarios</div>
+            <div>Data Transaccional</div>
+            <div>Historial RCC / Sistema Financiero</div>
+            <div>Gesti&oacute;n de Canales VPConnect</div>
+            <div>SUNAT</div>
+            <div>Data BPI (Digitalizaci&oacute;n)</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="h">Soluci&oacute;n Propuesta: Modelo Predictivo</div>
+          <div class="card" style="margin-top:4px">
+            <div class="badge">&#9733; Desarrollo del Modelo</div>
+            <p class="txt" style="margin-top:4px">Modelo de propensi&oacute;n (XGBoost / LightGBM) con validaci&oacute;n temporal y test out-of-time (OOT), sobre 251+ variables construidas en Athena con target y features parametrizados.</p>
+            <div class="badge">&#10003; Funcionalidad Clave: Scoring + Alertas</div>
+            <ul class="check">
+              <li>Estima la probabilidad de fuga por cliente.</li>
+              <li>Alertas de variaci&oacute;n de deuda (se&ntilde;al de compra de deuda).</li>
+              <li>Prioriza la cartera para gesti&oacute;n de retenci&oacute;n.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== Análisis del Target y Población Objetivo (PO) ===== -->
+    <div class="band">
+      <div class="h">An&aacute;lisis del Target y Poblaci&oacute;n Objetivo (PO)</div>
+      <div class="row2">
+        <div class="card">
+          <span class="tag">TARGET &middot; evento de fuga</span>
+          <ul class="deflist">
+            <li><b>Definici&oacute;n:</b> cliente que cancela o migra su deuda a otra entidad (se&ntilde;al en RCC) dentro de la ventana de performance.</li>
+            <li><b>Tasa base (prevalencia):</b> X% de fuga hist&oacute;rica &mdash; clase desbalanceada.</li>
+            <li><b>Ventana temporal:</b> observaci&oacute;n N meses &rarr; gap &rarr; performance M meses (evita leakage).</li>
+            <li><b>Granularidad:</b> 1 fila por cliente-periodo.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag">PO &middot; poblaci&oacute;n objetivo</span>
+          <ul class="deflist">
+            <li><b>Universo:</b> clientes Banca Negocio con cartera vigente y alto SOW.</li>
+            <li><b>Inclusi&oacute;n:</b> activos, con antig&uuml;edad y saldo m&iacute;nimo definidos.</li>
+            <li><b>Exclusi&oacute;n:</b> ya fugados, morosos / judicializados, reci&eacute;n captados.</li>
+            <li><b>Tama&ntilde;o estimado:</b> ~N clientes elegibles por mes.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SUGERIDO: Cronograma ===== -->
+    <div class="band">
+      <div class="h">Cronograma &amp; Hitos</div>
+      <div class="timeline">
+        <div class="step"><div class="num">1</div><div class="st">Relevamiento</div><div class="sd">Alcance y meta esperada</div></div>
+        <div class="step"><div class="num">2</div><div class="st">Pipeline Athena</div><div class="sd">Target + features (251+)</div></div>
+        <div class="step"><div class="num">3</div><div class="st">Entrenamiento OOT</div><div class="sd">XGBoost / LightGBM</div></div>
+        <div class="step"><div class="num">4</div><div class="st">Validaci&oacute;n</div><div class="sd">Gini, KS, PSI / CSI</div></div>
+        <div class="step"><div class="num">5</div><div class="st">Despliegue</div><div class="sd">Scoring + alertas</div></div>
+      </div>
+    </div>
+
+    <!-- ===== SUGERIDO: Métricas / Despliegue / Palanca de Retención ===== -->
+    <div class="band">
+      <div class="row3">
+        <div class="card">
+          <div class="h">M&eacute;tricas de &Eacute;xito del Modelo</div>
+          <ul>
+            <li>AUC / Gini y KS sobre OOT.</li>
+            <li>Estabilidad: PSI &lt; 0.10, CSI por variable.</li>
+            <li>Lift en deciles de mayor riesgo.</li>
+            <li>Umbral de despliegue fijo (PKL serializado).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="h">Despliegue &amp; Consumo</div>
+          <ul>
+            <li>Scoring batch mensual en SageMaker.</li>
+            <li>Alertas v&iacute;a Tit&aacute;n / Copilot Studio.</li>
+            <li>Entrega a gesti&oacute;n comercial (ejecutivo).</li>
+            <li>Monitoreo continuo de drift.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="h">Palanca de Retenci&oacute;n</div>
+          <ul>
+            <li>Tasa preferencial / reprice al cliente en riesgo.</li>
+            <li>Ampliaci&oacute;n o reestructura de l&iacute;nea.</li>
+            <li>Contacto proactivo del ejecutivo (gesti&oacute;n).</li>
+            <li>Beneficio de fidelizaci&oacute;n / retenci&oacute;n.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Gobierno del Proyecto ===== -->
+    <div class="band">
+      <div class="h">Roles y Responsabilidades</div>
+      <div class="gov">
+        <div class="card">
+          <div class="role">Stakeholder Principal</div>
+          <div class="desc">Define la meta esperada. DS sincera el alcance del modelo.</div>
+        </div>
+        <div class="card">
+          <div class="role">Usuario Final / Contacto Cercano</div>
+          <div class="desc">Lo asigna el Stakeholder Principal y es responsable del resultado.</div>
+        </div>
+        <div class="card">
+          <div class="role">Product Owner (PO)</div>
+          <div class="desc">Por definir.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
