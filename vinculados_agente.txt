@@ -1,0 +1,353 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- QUERY COMPLETA: UNIVERSO TIENDAS + REPRESENTANTES LEGALES + RCC PERSONAS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Autor: Karen Barrozo
+-- Fecha: 2026-05-15
+-- Objetivo: Integrar datos de vinculados (RRLL + cónyuge + RCC) al universo NBC
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 1: UNIVERSO BASE (CLIENTES TIENDAS)
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE disc_comercial.HM_UNIVERSO_VINCULADOS_BPE
+WITH (
+    format              = 'Parquet',
+    parquet_compression = 'SNAPPY',
+    partitioned_by      = ARRAY['codmes']
+)
+AS (
+
+WITH funnel AS (
+    SELECT
+        numeroruc        AS num_ruc,
+        periodo          AS periodo_campania,
+        canal,
+        campanha,
+        supervisor,
+        ejecutivo,
+        flg_gestionado,
+        flg_acepta1,
+        flg_ce,
+        flg_desembolsado,
+        colocacion
+    FROM disc_comercial.HM_FUNNEL_NEGOCIO_ACTUAL_VF f
+    WHERE
+        canal IN ('TIENDAS', 'TIENDAS VIRTUALES')
+        AND fecha_carga = (
+            SELECT MAX(fecha_carga)
+            FROM disc_comercial.HM_FUNNEL_NEGOCIO_ACTUAL_VF
+            WHERE periodo = f.periodo
+        )
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 2: REPRESENTANTES LEGALES (HASH → RUC EMPRESA)
+-- ═══════════════════════════════════════════════════════════════════════════
+ 
+rep_legal AS (
+    SELECT
+        ruc_value       AS ruc_hash_empresa,
+        tip_doc,
+        key_value       AS dni_hash_rrll,
+        des_cargo,
+        fec_vigencia,
+        estado,
+        fec_proceso,
+        est_registro
+    FROM e_perm_aws.t_mst_rep_legal_sunat_rsk
+
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 3: DATOS RENIEC (GÉNERO + CÓNYUGE)
+-- ═══════════════════════════════════════════════════════════════════════════
+ 
+reniec AS (
+    SELECT
+        tip_doc,
+        key_value       AS dni_hash,
+        fec_nacimiento,
+        est_civil,
+        genero,
+        tipdoc_conyugue,
+        coddoc_conyugue AS dni_hash_conyugue,
+        gen_conyugue,
+        fec_dato
+    FROM e_perm_aws.t_mst_reniec_rsk
+    WHERE
+        fec_dato = (
+            SELECT MAX(fec_dato)
+            FROM e_perm_aws.t_mst_reniec_rsk
+        )
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 4: RCC PERSONAS NATURALES (DEUDA + CALIFICACIÓN)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Join por: codmes + 2 meses = periodo_campania del universo
+-- Ejemplo: si periodo_campania = 202604 → buscar codmes = 202402
+ 
+rcc_personas AS (
+    SELECT
+        codmes,
+        tip_doc,
+        key_value       AS dni_hash,
+        
+        -- ── M01 (mes más reciente) ────────────────────────
+        lintot_m01,
+        saltot_m01,
+        salvig_m01,
+        clasif_sbs_m01,
+        pct_clasif_per_m01,
+        pct_clasif_dud_m01,
+        pct_clasif_def_m01,
+        pct_clasif_cpp_m01,
+        pct_clasif_nor_m01,
+        
+        -- ── M02 (mes anterior) ────────────────────────────
+        saltot_m02,
+        salvig_m02,
+        clasif_sbs_m02,
+        
+        -- ── M03 (2 meses antes) ───────────────────────────
+        saltot_m03,
+        salvig_m03,
+        clasif_sbs_m03,
+        
+        -- ── Agregados útiles ──────────────────────────────
+        ctd_ent_tot_m01 AS cant_entidades,
+        ctd_prod_m01    AS cant_productos
+        
+    FROM e_perm_aws.tbl_rcc_per_allsf_mdl
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 5: JOIN FUNNEL → REP LEGAL → RENIEC → RCC
+-- ═══════════════════════════════════════════════════════════════════════════
+ 
+base_con_rrll AS (
+    SELECT
+        -- ── Datos cliente empresa ─────────────────────────
+        f.num_ruc,
+        f.periodo_campania,
+        f.canal,
+        f.campanha,
+        f.supervisor,
+        f.ejecutivo,
+        f.flg_gestionado,
+        f.flg_acepta1,
+        f.flg_ce,
+        f.flg_desembolsado,
+        f.colocacion,
+        
+        -- ── Datos representante legal ─────────────────────
+        rl.dni_hash_rrll,
+        rl.des_cargo,
+        rl.fec_vigencia,
+        
+        -- ── Datos RENIEC representante ────────────────────
+        r.fec_nacimiento        AS rrll_fec_nacimiento,
+        r.est_civil             AS rrll_est_civil,
+        r.genero                AS rrll_genero,
+        r.dni_hash_conyugue     AS rrll_dni_conyugue,
+        r.gen_conyugue          AS rrll_gen_conyugue,
+        
+        -- ── RCC representante legal ───────────────────────
+        rcc.lintot_m01          AS rrll_linea_total,
+        rcc.saltot_m01          AS rrll_deuda_total,
+        rcc.salvig_m01          AS rrll_deuda_vigente,
+        rcc.clasif_sbs_m01      AS rrll_calificacion,
+        rcc.flg_bad_clasif_sbs_m01 AS rrll_mala_calificacion,
+        rcc.pct_clasif_per_m01  AS rrll_pct_perdida,
+        rcc.pct_clasif_dud_m01  AS rrll_pct_dudoso,
+        rcc.pct_clasif_def_m01  AS rrll_pct_deficiente,
+        rcc.pct_clasif_cpp_m01  AS rrll_pct_cpp,
+        rcc.pct_clasif_nor_m01  AS rrll_pct_normal,
+        rcc.cant_entidades      AS rrll_cant_entidades,
+        rcc.cant_productos      AS rrll_cant_productos,
+        
+        -- ── Calificación dominante (la que tiene mayor %) ─
+        CASE
+            WHEN COALESCE(rcc.pct_clasif_per_m01, 0) > 0 THEN 'PER'
+            WHEN COALESCE(rcc.pct_clasif_dud_m01, 0) > 0 THEN 'DUD'
+            WHEN COALESCE(rcc.pct_clasif_def_m01, 0) > 0 THEN 'DEF'
+            WHEN COALESCE(rcc.pct_clasif_cpp_m01, 0) > 0 THEN 'CPP'
+            WHEN COALESCE(rcc.pct_clasif_nor_m01, 0) > 0 THEN 'NOR'
+            ELSE 'SIN_DEUDA'
+        END AS rrll_calif_dominante,
+        
+        -- ── Variaciones deuda RRLL (m01 vs m03) ──────────
+        COALESCE(rcc.saltot_m01, 0) - COALESCE(rcc.saltot_m03, 0)
+            AS rrll_var_deuda_3m
+        
+    FROM funnel f
+    
+    -- Join representantes legales
+    LEFT JOIN rep_legal rl
+        ON f.num_ruc = rl.ruc_hash_empresa
+    
+    -- Join RENIEC
+    LEFT JOIN reniec r
+        ON rl.dni_hash_rrll = r.dni_hash
+        AND rl.tip_doc = r.tip_doc
+    
+    -- Join RCC personas (periodo - 2 meses)
+    LEFT JOIN rcc_personas rcc
+        ON rl.dni_hash_rrll = rcc.dni_hash
+        AND rl.tip_doc = rcc.tip_doc
+        AND rcc.codmes = CAST(
+            CAST(f.periodo_campania AS INT) - 2 AS VARCHAR
+        )
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 6: AGREGAR RCC DEL CÓNYUGE (SI EXISTE)
+-- ═══════════════════════════════════════════════════════════════════════════
+ 
+base_con_conyugue AS (
+    SELECT
+        b.*,
+        
+        -- ── RCC cónyuge ───────────────────────────────────
+        rcc_con.saltot_m01      AS conyugue_deuda_total,
+        rcc_con.salvig_m01      AS conyugue_deuda_vigente,
+        rcc_con.clasif_sbs_m01  AS conyugue_calificacion,
+        rcc_con.flg_bad_clasif_sbs_m01 AS conyugue_mala_calificacion,
+        rcc_con.pct_clasif_per_m01 AS conyugue_pct_perdida,
+        rcc_con.pct_clasif_dud_m01 AS conyugue_pct_dudoso,
+        rcc_con.pct_clasif_def_m01 AS conyugue_pct_deficiente,
+        rcc_con.pct_clasif_cpp_m01 AS conyugue_pct_cpp,
+        rcc_con.pct_clasif_nor_m01 AS conyugue_pct_normal,
+        rcc_con.cant_entidades  AS conyugue_cant_entidades,
+        
+        -- ── Calificación dominante cónyuge ────────────────
+        CASE
+            WHEN COALESCE(rcc_con.pct_clasif_per_m01,0) > 0 THEN 'PER'
+            WHEN COALESCE(rcc_con.pct_clasif_dud_m01,0) > 0 THEN 'DUD'
+            WHEN COALESCE(rcc_con.pct_clasif_def_m01,0) > 0 THEN 'DEF'
+            WHEN COALESCE(rcc_con.pct_clasif_cpp_m01,0) > 0 THEN 'CPP'
+            WHEN COALESCE(rcc_con.pct_clasif_nor_m01,0) > 0 THEN 'NOR'
+            ELSE 'SIN_DEUDA'
+        END AS conyugue_calif_dominante, periodo_campania codmes
+        
+    FROM base_con_rrll b
+    
+    -- Join RCC del cónyuge
+    LEFT JOIN rcc_personas rcc_con
+        ON b.rrll_dni_conyugue = rcc_con.dni_hash
+        AND rcc_con.tip_doc = '1'  -- DNI
+        AND rcc_con.codmes = CAST(
+            CAST(b.periodo_campania AS INT) - 2 AS VARCHAR
+        )
+),
+ 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- PASO 7: CALCULAR SEÑALES AGREGADAS POR EMPRESA
+-- ═══════════════════════════════════════════════════════════════════════════
+senales_vinculados AS (
+    SELECT
+        num_ruc,
+        periodo_campania,
+        
+        -- ── Count representantes legales ──────────────────
+        COUNT(DISTINCT dni_hash_rrll) AS total_rrll,
+        
+        -- ── Señales de riesgo RRLL ────────────────────────
+        -- Si pct_clasif_* = 1 → 100% de deuda en esa calificación
+        SUM(CASE
+            WHEN COALESCE(rrll_pct_perdida, 0) > 0
+                 OR COALESCE(rrll_pct_dudoso, 0) > 0
+                 OR COALESCE(rrll_pct_deficiente, 0) > 0 THEN 1
+            ELSE 0
+        END) AS rrll_con_mala_calif,
+        
+        SUM(CASE
+            WHEN COALESCE(rrll_deuda_total, 0) > 0 THEN 1
+            ELSE 0
+        END) AS rrll_con_deuda,
+        
+        SUM(CASE
+            WHEN COALESCE(rrll_pct_cpp, 0) > 0
+                 OR COALESCE(rrll_pct_deficiente, 0) > 0
+                 OR COALESCE(rrll_pct_dudoso, 0) > 0
+                 OR COALESCE(rrll_pct_perdida, 0) > 0 THEN 1
+            ELSE 0
+        END) AS rrll_con_calificacion_riesgosa,
+        
+        -- ── Señales de riesgo CÓNYUGE ─────────────────────
+        SUM(CASE
+            WHEN COALESCE(conyugue_pct_perdida, 0) > 0
+                 OR COALESCE(conyugue_pct_dudoso, 0) > 0
+                 OR COALESCE(conyugue_pct_deficiente, 0) > 0 THEN 1
+            ELSE 0
+        END) AS conyugue_con_mala_calif,
+        
+        -- ── Deuda total vinculados ────────────────────────
+        SUM(COALESCE(rrll_deuda_total, 0)) AS deuda_total_rrll,
+        SUM(COALESCE(conyugue_deuda_total, 0)) AS deuda_total_conyugue,
+        SUM(
+            COALESCE(rrll_deuda_total, 0) +
+            COALESCE(conyugue_deuda_total, 0)
+        ) AS deuda_total_vinculados,
+        
+        -- ── Peor calificación de todos los vinculados ─────
+        -- Se asigna score según la peor calificación con deuda
+        MAX(
+            CASE
+                WHEN COALESCE(rrll_pct_perdida, 0) > 0 THEN 5
+                WHEN COALESCE(rrll_pct_dudoso, 0) > 0 THEN 4
+                WHEN COALESCE(rrll_pct_deficiente, 0) > 0 THEN 3
+                WHEN COALESCE(rrll_pct_cpp, 0) > 0 THEN 2
+                WHEN COALESCE(rrll_pct_normal, 0) > 0 THEN 1
+                ELSE 0
+            END
+        ) AS peor_calificacion_score,
+        
+        -- ── Flag bloqueo automático ───────────────────────
+        -- Bloquea si ANY vinculado tiene CPP, DEF, DUD o PER
+        MAX(CASE
+            WHEN COALESCE(rrll_pct_cpp, 0) > 0
+                 OR COALESCE(rrll_pct_deficiente, 0) > 0
+                 OR COALESCE(rrll_pct_dudoso, 0) > 0
+                 OR COALESCE(rrll_pct_perdida, 0) > 0
+                 OR COALESCE(conyugue_pct_cpp, 0) > 0
+                 OR COALESCE(conyugue_pct_deficiente, 0) > 0
+                 OR COALESCE(conyugue_pct_dudoso, 0) > 0
+                 OR COALESCE(conyugue_pct_perdida, 0) > 0 THEN 1
+            ELSE 0
+        END) AS flg_bloqueo_vinculados
+        
+    FROM base_con_conyugue
+    GROUP BY num_ruc, periodo_campania
+)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- RESULTADO FINAL: UNIVERSO + SEÑALES AGREGADAS
+-- ═══════════════════════════════════════════════════════════════════════════
+SELECT
+    b.*,
+    s.total_rrll,
+    s.rrll_con_mala_calif,
+    s.rrll_con_deuda,
+    s.rrll_con_calificacion_riesgosa,
+    s.conyugue_con_mala_calif,
+    s.deuda_total_rrll,
+    s.deuda_total_conyugue,
+    s.deuda_total_vinculados,
+    s.peor_calificacion_score,
+    s.flg_bloqueo_vinculados,
+    
+    -- ── Clasificación nivel riesgo vinculados ────────
+    CASE
+        WHEN s.flg_bloqueo_vinculados = 1 THEN 'ALTO'
+        WHEN s.rrll_con_mala_calif >= 1
+             OR s.conyugue_con_mala_calif >= 1 THEN 'MEDIO'
+        WHEN s.deuda_total_vinculados > 50000 THEN 'MEDIO'
+        WHEN s.total_rrll = 0 THEN 'SIN_DATOS'
+        ELSE 'BAJO'
+    END AS nivel_riesgo_vinculados, codmes
+FROM base_con_conyugue b
+LEFT JOIN senales_vinculados s
+    ON b.num_ruc = s.num_ruc
+    AND b.periodo_campania = s.periodo_campania
+
+
+
