@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poder del grupo Izi sobre la afiliación</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --verde-claro:#00BE50;
+    --azul:#1F4592;
+    --verde-corp:#005F1E;
+    --verde-suave:#C6FFC0;
+    --gris:#8A94A6;
+    --gris-claro:#EDEFF3;
+    --tinta:#1A2233;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Poppins',sans-serif;
+    color:var(--tinta);
+    background:#F4F6F9;
+    padding:32px 20px;
+    line-height:1.45;
+  }
+  .page{
+    max-width:1080px;margin:0 auto;background:#fff;
+    border-radius:14px;overflow:hidden;
+    box-shadow:0 8px 30px rgba(26,34,51,.08);
+  }
+  /* HEADER */
+  header{
+    padding:30px 40px 26px;
+    border-top:6px solid var(--verde-claro);
+  }
+  .eyebrow{
+    font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--verde-claro);margin-bottom:8px;
+  }
+  h1{font-size:25px;font-weight:600;color:var(--azul);line-height:1.2;}
+  .sub{font-size:13.5px;color:var(--gris);font-weight:400;margin-top:8px;max-width:760px;}
+  /* SECTION */
+  section{padding:8px 40px 30px;}
+  .h2{
+    font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--verde-corp);margin:26px 0 16px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .h2::before{content:"";width:18px;height:3px;background:var(--verde-claro);border-radius:2px;}
+  /* KPI CARDS */
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .kpi{
+    border:1px solid var(--gris-claro);border-radius:11px;padding:18px 18px 16px;
+    position:relative;
+  }
+  .kpi .per{font-size:12px;font-weight:600;color:var(--azul);letter-spacing:.04em;}
+  .kpi .grid{display:flex;gap:22px;margin-top:12px;align-items:flex-end;}
+  .kpi .metric .v{font-size:30px;font-weight:700;color:var(--tinta);line-height:1;}
+  .kpi .metric .l{font-size:10.5px;color:var(--gris);text-transform:uppercase;letter-spacing:.07em;margin-top:5px;}
+  .kpi .metric .v.muted{color:var(--gris);}
+  .tag{
+    position:absolute;top:16px;right:16px;font-size:10px;font-weight:600;
+    padding:3px 9px;border-radius:20px;letter-spacing:.03em;
+  }
+  .tag.ok{background:var(--verde-suave);color:var(--verde-corp);}
+  .tag.warn{background:#FFE7C2;color:#9A5B00;}
+  .kpi .foot{font-size:11px;color:var(--gris);margin-top:14px;}
+  /* LIFT CHART */
+  .liftwrap{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;}
+  .liftcol .ct{font-size:12px;font-weight:600;color:var(--azul);margin-bottom:12px;}
+  .row{display:flex;align-items:center;margin-bottom:9px;gap:10px;}
+  .row .name{width:78px;font-size:10.5px;color:var(--tinta);font-weight:500;flex:none;text-align:right;}
+  .bartrack{position:relative;flex:1;height:20px;}
+  .baseline{position:absolute;top:-3px;bottom:-3px;left:66.6%;width:1px;background:var(--gris);opacity:.55;}
+  .bar{height:20px;border-radius:4px;display:flex;align-items:center;justify-content:flex-end;
+       padding-right:6px;font-size:10px;font-weight:600;color:#fff;min-width:26px;}
+  .bar.up{background:var(--verde-claro);}
+  .bar.flat{background:var(--azul);opacity:.55;}
+  .bar.down{background:var(--gris);}
+  .axisnote{font-size:9.5px;color:var(--gris);margin-top:8px;padding-left:88px;}
+  /* TABLE */
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;}
+  thead th{
+    background:var(--azul);color:#fff;font-weight:500;padding:9px 10px;text-align:right;
+    font-size:11px;letter-spacing:.02em;
+  }
+  thead th:first-child,thead th:nth-child(2){text-align:left;}
+  tbody td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--gris-claro);}
+  tbody td:first-child,tbody td:nth-child(2){text-align:left;}
+  tbody tr.perstart td{border-top:2px solid var(--verde-suave);}
+  .per-cell{font-weight:600;color:var(--azul);}
+  .gname{font-weight:500;}
+  .lift-pill{display:inline-block;min-width:42px;padding:2px 8px;border-radius:20px;font-weight:600;font-size:11px;}
+  .lift-pill.up{background:var(--verde-suave);color:var(--verde-corp);}
+  .lift-pill.down{background:var(--gris-claro);color:var(--gris);}
+  tbody tr.total td{background:#FAFBFC;font-weight:600;color:var(--tinta);}
+  /* READING */
+  .reading{background:#FAFBFC;border:1px solid var(--gris-claro);border-left:4px solid var(--verde-claro);
+           border-radius:0 10px 10px 0;padding:18px 22px;}
+  .reading ul{list-style:none;}
+  .reading li{font-size:12.5px;margin-bottom:11px;padding-left:20px;position:relative;color:var(--tinta);}
+  .reading li:last-child{margin-bottom:0;}
+  .reading li::before{content:"";position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:50%;background:var(--verde-claro);}
+  .reading b{color:var(--azul);font-weight:600;}
+  .warnnote{color:#9A5B00;}
+  /* FOOTER */
+  footer{padding:18px 40px 26px;border-top:1px solid var(--gris-claro);
+         display:flex;justify-content:space-between;font-size:10.5px;color:var(--gris);}
+  footer .brand{font-weight:600;color:var(--azul);}
+  @media(max-width:820px){
+    .kpis,.liftwrap{grid-template-columns:1fr;}
+    section,header,footer{padding-left:22px;padding-right:22px;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="eyebrow">Modelo de propensión Izipay · NBC Empresas</div>
+    <h1>Poder discriminante del grupo Izi sobre la afiliación, por periodo</h1>
+    <p class="sub">Medición sobre RUC único por periodo (afiliado = al menos una afiliación efectiva).
+    Base depurada de eventos duplicados de cotización/afiliación. Métricas: tasa de afiliación, lift vs.
+    base del periodo y discriminación del score (AUC / Gini).</p>
+  </header>
+
+  <section>
+    <div class="h2">Discriminación por periodo</div>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="per">202604</div>
+        <span class="tag ok">Discrimina</span>
+        <div class="grid">
+          <div class="metric"><div class="v">0.206</div><div class="l">Gini</div></div>
+          <div class="metric"><div class="v">0.603</div><div class="l">AUC</div></div>
+          <div class="metric"><div class="v">28.1%</div><div class="l">Tasa base</div></div>
+        </div>
+        <div class="foot">2,333 RUC · 656 afiliados</div>
+      </div>
+      <div class="kpi">
+        <div class="per">202605</div>
+        <span class="tag ok">Discrimina</span>
+        <div class="grid">
+          <div class="metric"><div class="v">0.196</div><div class="l">Gini</div></div>
+          <div class="metric"><div class="v">0.598</div><div class="l">AUC</div></div>
+          <div class="metric"><div class="v">26.8%</div><div class="l">Tasa base</div></div>
+        </div>
+        <div class="foot">2,198 RUC · 588 afiliados</div>
+      </div>
+      <div class="kpi">
+        <div class="per">202606</div>
+        <span class="tag warn">Periodo inmaduro</span>
+        <div class="grid">
+          <div class="metric"><div class="v muted">0.063</div><div class="l">Gini</div></div>
+          <div class="metric"><div class="v muted">0.531</div><div class="l">AUC</div></div>
+          <div class="metric"><div class="v">26.1%</div><div class="l">Tasa base</div></div>
+        </div>
+        <div class="foot">706 RUC · 184 afiliados · afiliación aún madurando</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="h2">Lift de afiliación por grupo Izi</div>
+    <div class="liftwrap">
+      <!-- 202604 -->
+      <div class="liftcol">
+        <div class="ct">202604</div>
+        <div class="row"><div class="name">1. Muy alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:95%">1.42</div></div></div>
+        <div class="row"><div class="name">2. Alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:100%">1.49</div></div></div>
+        <div class="row"><div class="name">3. Medio</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:86%">1.28</div></div></div>
+        <div class="row"><div class="name">4. Bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar flat" style="width:70%">1.05</div></div></div>
+        <div class="row"><div class="name">5. Muy bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar down" style="width:49%">0.73</div></div></div>
+      </div>
+      <!-- 202605 -->
+      <div class="liftcol">
+        <div class="ct">202605</div>
+        <div class="row"><div class="name">1. Muy alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:99%">1.48</div></div></div>
+        <div class="row"><div class="name">2. Alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:81%">1.20</div></div></div>
+        <div class="row"><div class="name">3. Medio</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:80%">1.20</div></div></div>
+        <div class="row"><div class="name">4. Bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar flat" style="width:69%">1.03</div></div></div>
+        <div class="row"><div class="name">5. Muy bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar down" style="width:50%">0.75</div></div></div>
+      </div>
+      <!-- 202606 -->
+      <div class="liftcol">
+        <div class="ct">202606 <span style="color:var(--gris);font-weight:400;">(parcial)</span></div>
+        <div class="row"><div class="name">1. Muy alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:73%">1.10</div></div></div>
+        <div class="row"><div class="name">2. Alto</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:72%">1.08</div></div></div>
+        <div class="row"><div class="name">3. Medio</div><div class="bartrack"><div class="baseline"></div><div class="bar up" style="width:88%">1.32</div></div></div>
+        <div class="row"><div class="name">4. Bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar down" style="width:62%">0.93</div></div></div>
+        <div class="row"><div class="name">5. Muy bajo</div><div class="bartrack"><div class="baseline"></div><div class="bar down" style="width:61%">0.92</div></div></div>
+      </div>
+    </div>
+    <div class="axisnote">Línea vertical = base del periodo (lift 1.00). Verde: sobre la base · azul: en la base · gris: por debajo.</div>
+  </section>
+
+  <section>
+    <div class="h2">Detalle por grupo</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Periodo</th><th>Grupo Izi</th><th>RUC</th><th>Afiliados</th>
+          <th>Tasa afil.</th><th>Lift</th><th>% pob.</th><th>% afil. captados</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="perstart"><td class="per-cell" rowspan="5">202604</td><td class="gname">1. Muy alto</td><td>445</td><td>178</td><td>40.0%</td><td><span class="lift-pill up">1.42</span></td><td>19.1%</td><td>27.1%</td></tr>
+        <tr><td class="gname">2. Alto</td><td>150</td><td>63</td><td>42.0%</td><td><span class="lift-pill up">1.49</span></td><td>6.4%</td><td>9.6%</td></tr>
+        <tr><td class="gname">3. Medio</td><td>147</td><td>53</td><td>36.1%</td><td><span class="lift-pill up">1.28</span></td><td>6.3%</td><td>8.1%</td></tr>
+        <tr><td class="gname">4. Bajo</td><td>389</td><td>115</td><td>29.6%</td><td><span class="lift-pill up">1.05</span></td><td>16.7%</td><td>17.5%</td></tr>
+        <tr><td class="gname">5. Muy bajo</td><td>1,202</td><td>247</td><td>20.5%</td><td><span class="lift-pill down">0.73</span></td><td>51.5%</td><td>37.7%</td></tr>
+
+        <tr class="perstart"><td class="per-cell" rowspan="5">202605</td><td class="gname">1. Muy alto</td><td>426</td><td>169</td><td>39.7%</td><td><span class="lift-pill up">1.48</span></td><td>19.4%</td><td>28.7%</td></tr>
+        <tr><td class="gname">2. Alto</td><td>140</td><td>45</td><td>32.1%</td><td><span class="lift-pill up">1.20</span></td><td>6.4%</td><td>7.7%</td></tr>
+        <tr><td class="gname">3. Medio</td><td>153</td><td>49</td><td>32.0%</td><td><span class="lift-pill up">1.20</span></td><td>7.0%</td><td>8.3%</td></tr>
+        <tr><td class="gname">4. Bajo</td><td>366</td><td>101</td><td>27.6%</td><td><span class="lift-pill up">1.03</span></td><td>16.7%</td><td>17.2%</td></tr>
+        <tr><td class="gname">5. Muy bajo</td><td>1,113</td><td>224</td><td>20.1%</td><td><span class="lift-pill down">0.75</span></td><td>50.6%</td><td>38.1%</td></tr>
+
+        <tr class="perstart"><td class="per-cell" rowspan="5">202606<br><span style="font-weight:400;color:var(--gris);font-size:10px;">parcial</span></td><td class="gname">1. Muy alto</td><td>140</td><td>40</td><td>28.6%</td><td><span class="lift-pill up">1.10</span></td><td>19.8%</td><td>21.7%</td></tr>
+        <tr><td class="gname">2. Alto</td><td>39</td><td>11</td><td>28.2%</td><td><span class="lift-pill up">1.08</span></td><td>5.5%</td><td>6.0%</td></tr>
+        <tr><td class="gname">3. Medio</td><td>61</td><td>21</td><td>34.4%</td><td><span class="lift-pill up">1.32</span></td><td>8.6%</td><td>11.4%</td></tr>
+        <tr><td class="gname">4. Bajo</td><td>103</td><td>25</td><td>24.3%</td><td><span class="lift-pill down">0.93</span></td><td>14.6%</td><td>13.6%</td></tr>
+        <tr><td class="gname">5. Muy bajo</td><td>363</td><td>87</td><td>24.0%</td><td><span class="lift-pill down">0.92</span></td><td>51.4%</td><td>47.3%</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="h2">Lectura</div>
+    <div class="reading">
+      <ul>
+        <li>En <b>202604 y 202605 el grupo Izi discrimina afiliación de forma consistente</b>: P1 (Muy alto) afilia ~1,4–1,5× la base y Muy bajo cae a ~0,73–0,75×. Gini estable en torno a <b>0,20</b>.</li>
+        <li>La separación relevante es <b>P1–P3 vs. Muy bajo</b>. La leve inversión P1↔P2 en la cima ocurre sobre grupos chicos (~140–150 RUC), por lo que es ruido esperable, no un quiebre del orden.</li>
+        <li><span class="warnnote"><b>202606 no debe leerse como deterioro:</b></span> es un periodo parcial (706 RUC) con afiliación aún madurando. Conviene re-medir al cierre antes de cualquier conclusión.</li>
+        <li>El grupo <b>Muy bajo concentra ~51% de la población y solo ~38% de los afiliados</b>: es el espacio natural para despriorizar contacto sin sacrificar volumen relevante de afiliación.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span class="brand">Interbank · Advanced Analytics &amp; AI — NBC Empresas</span>
+    <span>Unidad: RUC único por periodo · Métrica: afiliación efectiva</span>
+  </footer>
+
+</div>
+</body>
+</html>
