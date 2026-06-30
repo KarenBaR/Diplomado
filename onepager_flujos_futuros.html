@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Pager &mdash; Modelo Predictivo de Flujos Futuros</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+  :root{
+    --green:#00BE50;
+    --green-dark:#005F1E;
+    --green-tint:#EAFBF0;
+    --green-line:#C6FFC0;
+    --blue:#1F4592;
+    --ink:#1A1A1A;
+    --body:#374151;
+    --muted:#6B7280;
+    --line:#E5E7EB;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Poppins',Arial,sans-serif;
+    background:#F3F4F6;
+    color:var(--body);
+    padding:28px;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .page{
+    width:1280px;
+    margin:0 auto;
+    background:#FFFFFF;
+    border-radius:14px;
+    overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+  }
+
+  /* ---- Banner ---- */
+  .banner{
+    background:var(--green);
+    color:#fff;
+    text-align:center;
+    padding:22px 40px;
+  }
+  .banner h1{font-size:26px;font-weight:700;letter-spacing:.2px;}
+
+  .subtitle{
+    color:var(--blue);
+    font-weight:600;
+    font-size:15px;
+    padding:18px 44px 6px;
+  }
+
+  /* ---- Layout ---- */
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:30px;
+    padding:14px 44px 8px;
+  }
+  .col{display:flex;flex-direction:column;gap:16px;}
+
+  .h{
+    color:var(--green-dark);
+    font-weight:700;
+    font-size:16px;
+    margin-bottom:6px;
+  }
+  .h-blue{color:var(--blue);font-weight:700;font-size:18px;margin:2px 0 6px;}
+  p.txt{font-size:13px;line-height:1.5;color:var(--body);}
+
+  .highlight{
+    background:var(--green-tint);
+    border-radius:8px;
+    padding:12px 14px;
+    font-size:13px;line-height:1.5;
+  }
+  .highlight b{color:var(--green-dark);}
+
+  /* ---- KPIs ---- */
+  .kpi{margin-bottom:12px;}
+  .kpi-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px;}
+  .kpi-row .val{color:var(--green-dark);font-weight:700;}
+  .bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;}
+  .bar span{display:block;height:100%;background:var(--green);border-radius:6px;}
+
+  /* ---- Stat list ---- */
+  ul.stats{list-style:none;display:flex;flex-direction:column;gap:8px;}
+  ul.stats li{font-size:13px;line-height:1.45;padding-left:22px;position:relative;}
+  ul.stats li::before{
+    content:"";position:absolute;left:0;top:5px;
+    width:11px;height:11px;border-radius:3px;background:var(--green);
+  }
+  ul.stats b{color:var(--ink);}
+
+  /* ---- Data sources grid ---- */
+  .data-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;}
+  .data-grid div{font-size:13px;padding-left:24px;position:relative;color:var(--body);}
+  .data-grid div::before{
+    content:"";position:absolute;left:0;top:3px;width:13px;height:13px;border-radius:50%;
+    background:var(--green);
+  }
+
+  .card{
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .check{list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+  .check li{font-size:13px;line-height:1.4;padding-left:20px;position:relative;}
+  .check li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:700;}
+  .badge{font-size:13px;font-weight:600;color:var(--green-dark);margin-top:10px;}
+
+  /* ---- Section band ---- */
+  .band{padding:18px 44px;}
+  .band > .h{font-size:17px;margin-bottom:14px;}
+
+  /* ---- Timeline ---- */
+  .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .step{
+    background:var(--green-tint);
+    border:1px solid var(--green-line);
+    border-radius:10px;
+    padding:12px;
+  }
+  .step .num{
+    width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;
+    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:8px;
+  }
+  .step .st{font-size:13px;font-weight:600;color:var(--ink);}
+  .step .sd{font-size:11px;color:var(--muted);margin-top:3px;}
+
+  /* ---- 2-card row (análisis) ---- */
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .deflist{list-style:none;display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+  .deflist li{font-size:13px;line-height:1.45;color:var(--body);}
+  .deflist li b{color:var(--green-dark);font-weight:600;}
+  .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--blue);background:#EAF0FB;
+       border-radius:6px;padding:2px 8px;margin-bottom:4px;}
+
+  /* ---- 3-card row ---- */
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .row3 .card .h{font-size:14px;}
+  .row3 .card p,.row3 .card li{font-size:12.5px;line-height:1.45;}
+  .row3 ul{list-style:none;display:flex;flex-direction:column;gap:5px;margin-top:6px;}
+  .row3 ul li{padding-left:16px;position:relative;}
+  .row3 ul li::before{content:"";position:absolute;left:0;top:6px;width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+  /* ---- Governance ---- */
+  .gov{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .gov .card{background:var(--green-tint);border-color:var(--green-line);}
+  .gov .role{font-size:14px;font-weight:700;color:var(--green-dark);margin-bottom:5px;}
+  .gov .desc{font-size:12.5px;line-height:1.45;color:var(--body);}
+
+  .divider{height:1px;background:var(--line);margin:0 44px;}
+
+  footer{padding:14px 44px 22px;font-size:11px;color:var(--muted);}
+
+  @media print{
+    body{background:#fff;padding:0;}
+    .page{box-shadow:none;border-radius:0;width:100%;}
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="banner">
+      <h1>One Pager: Modelo Predictivo de Flujos Futuros</h1>
+    </div>
+    <div class="subtitle">Proyectar el flujo futuro (6&ndash;12 meses) de cada cliente para identificar la brecha de oportunidad en cr&eacute;dito y captaci&oacute;n de dep&oacute;sitos.</div>
+
+    <!-- ===== Esquema original (2 columnas) ===== -->
+    <div class="grid">
+      <!-- IZQUIERDA -->
+      <div class="col">
+        <div>
+          <div class="h">Objetivo del Modelo</div>
+          <p class="txt">Predecir el flujo futuro de los clientes con un horizonte de <b>6 a 12 meses</b>, para identificar la brecha entre su capacidad real y lo que el banco hoy capta / coloca, y activar dos palancas de negocio: <b>otorgar o ampliar cr&eacute;dito</b> y <b>aumentar la captaci&oacute;n de dep&oacute;sitos</b>.</p>
+        </div>
+
+        <div class="highlight"><b>Reemplazar:</b> el modelo actual de inferencia de ventas (precisi&oacute;n ~30%) por una proyecci&oacute;n m&aacute;s precisa del flujo futuro, que permita detectar la oportunidad antes que la competencia.</div>
+
+        <div>
+          <div class="h">KPIs Clave</div>
+          <div class="kpi">
+            <div class="kpi-row"><span>Aumento de colocaciones (cr&eacute;dito otorgado / ampliado)</span><span class="val">+X%</span></div>
+            <div class="bar"><span style="width:60%"></span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-row"><span>Aumento de captaci&oacute;n de dep&oacute;sitos</span><span class="val">+Y%</span></div>
+            <div class="bar"><span style="width:52%"></span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="h">Situaci&oacute;n Actual</div>
+          <ul class="stats">
+            <li>Modelo actual de inferencia de ventas: <b>precisi&oacute;n ~30%</b>, insuficiente para decisiones de cr&eacute;dito.</li>
+            <li><b>No se cuenta</b> con informaci&oacute;n de ventas directa de todos los clientes.</li>
+            <li><b>Reframe:</b> la oportunidad es la <b>brecha</b> entre el flujo potencial y lo que el banco hoy capta / coloca.</li>
+            <li><b>Ejemplo:</b> cliente con flujo 100 y solo 30 otorgado &rarr; oportunidad de 70.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- DERECHA -->
+      <div class="col">
+        <div>
+          <div class="h">Segmento Target</div>
+          <div class="h-blue">Clientes Banca Negocio / Empresas con actividad transaccional</div>
+          <p class="txt">Foco en clientes con <b>historial transaccional suficiente</b> para proyectar flujo; <b>extrapolaci&oacute;n por giro de negocio</b> (benchmarks / medianas) para clientes con informaci&oacute;n incompleta.</p>
+        </div>
+
+        <div>
+          <div class="h">Data Hist&oacute;rica Relevante</div>
+          <div class="data-grid">
+            <div>Transacciones monetarias (dep&oacute;sitos, cash-in / cash-out, transferencias)</div>
+            <div>Transacciones no monetarias (consultas de saldo, aperturas de cuenta)</div>
+            <div>Datos macroecon&oacute;micos por zona</div>
+            <div>Izipay / modelos de informalidad</div>
+            <div>RCC / Sistema Financiero</div>
+            <div>Cash transaccional (fuentes de efectivo)</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="h">Soluci&oacute;n Propuesta: Modelo Predictivo</div>
+          <div class="card" style="margin-top:4px">
+            <div class="badge">&#9733; Desarrollo del Modelo</div>
+            <p class="txt" style="margin-top:4px">Modelo de proyecci&oacute;n de flujo futuro a 6&ndash;12 meses, integrando se&ntilde;ales monetarias, no monetarias y macro por zona, con extrapolaci&oacute;n por giro de negocio.</p>
+            <div class="badge">&#10003; Output Clave: Base de clientes con flujo proyectado</div>
+            <ul class="check">
+              <li>Estima el flujo esperado por cliente y la brecha de oportunidad.</li>
+              <li>Alimenta campa&ntilde;as de captaci&oacute;n y gesti&oacute;n de ejecutivos.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== Análisis del Target y Población Objetivo (PO) ===== -->
+    <div class="band">
+      <div class="h">An&aacute;lisis del Target y Poblaci&oacute;n Objetivo (PO)</div>
+      <div class="row2">
+        <div class="card">
+          <span class="tag">TARGET &middot; flujo futuro proyectado</span>
+          <ul class="deflist">
+            <li><b>Definici&oacute;n:</b> Flujo esperado del cliente (variable continua) en la ventana de proyecci&oacute;n.</li>
+            <li><b>Horizonte:</b> 6 a 12 meses.</li>
+            <li><b>Granularidad:</b> 1 fila por cliente-periodo.</li>
+            <li><b>Observaci&oacute;n:</b> pendiente definir el componente exacto del flujo (total, neto o por tipo de transacci&oacute;n) y validar qu&eacute; cruces monetarios / no monetarios tienen mayor impacto (reuni&oacute;n con Carito).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag">PO &middot; poblaci&oacute;n objetivo</span>
+          <ul class="deflist">
+            <li><b>Universo:</b> Clientes Banca Negocio / Empresas con actividad transaccional registrada.</li>
+            <li><b>Exclusi&oacute;n:</b> Clientes sin data transaccional suficiente para proyectar.</li>
+            <li><b>Extrapolaci&oacute;n:</b> Benchmarks / medianas por giro para clientes con informaci&oacute;n incompleta.</li>
+            <li><b>Tama&ntilde;o estimado:</b> pendiente de dimensionar.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Cronograma ===== -->
+    <div class="band">
+      <div class="h">Cronograma &amp; Hitos</div>
+      <div class="timeline">
+        <div class="step"><div class="num">1</div><div class="st">Relevamiento</div><div class="sd">Definir output (base de flujos)</div></div>
+        <div class="step"><div class="num">2</div><div class="st">Extracci&oacute;n de Data</div><div class="sd">Cash transaccional (Carito)</div></div>
+        <div class="step"><div class="num">3</div><div class="st">Feature Engineering</div><div class="sd">Monetarias + no monetarias + macro</div></div>
+        <div class="step"><div class="num">4</div><div class="st">Modelo + Validaci&oacute;n</div><div class="sd">Proyecci&oacute;n y precisi&oacute;n</div></div>
+        <div class="step"><div class="num">5</div><div class="st">Despliegue</div><div class="sd">Base de clientes &rarr; campa&ntilde;as</div></div>
+      </div>
+    </div>
+
+    <!-- ===== Métricas / Despliegue / Acciones ===== -->
+    <div class="band">
+      <div class="row3">
+        <div class="card">
+          <div class="h">M&eacute;tricas de &Eacute;xito del Modelo</div>
+          <ul>
+            <li>Precisi&oacute;n de proyecci&oacute;n (vs ~30% actual).</li>
+            <li>Error del flujo proyectado vs real.</li>
+            <li>Cobertura de clientes con flujo estimado.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="h">Despliegue &amp; Consumo</div>
+          <ul>
+            <li>Base de clientes con flujo proyectado a 6&ndash;12 meses.</li>
+            <li>Entrega a gesti&oacute;n comercial (ejecutivo).</li>
+            <li>Derivaci&oacute;n a campa&ntilde;as de captaci&oacute;n.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="h">Acciones de Negocio</div>
+          <ul>
+            <li>Preaprobaci&oacute;n / ampliaci&oacute;n de cr&eacute;dito (con Riesgos).</li>
+            <li>Captaci&oacute;n de dep&oacute;sitos sobre la brecha detectada.</li>
+            <li>Priorizaci&oacute;n de zonas con mayor potencial de efectivo.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Gobierno del Proyecto ===== -->
+    <div class="band">
+      <div class="h">Roles y Responsabilidades</div>
+      <div class="gov">
+        <div class="card">
+          <div class="role">Validaci&oacute;n / Riesgos</div>
+          <div class="desc">Cristina (Riesgos) &mdash; clave para validar el modelo desde el inicio y habilitar las preaprobaciones de cr&eacute;dito.</div>
+        </div>
+        <div class="card">
+          <div class="role">Fuente de Data (Cash)</div>
+          <div class="desc">Carito &mdash; conoce las fuentes de efectivo transaccional y cr&eacute;ditos.</div>
+        </div>
+        <div class="card">
+          <div class="role">Data Anal&iacute;tica</div>
+          <div class="desc">Milee y Care &mdash; fuentes de informaci&oacute;n y cruces anal&iacute;ticos.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
